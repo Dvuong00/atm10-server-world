@@ -1,0 +1,425 @@
+General Information
+Goldcube is fictional game console built in CraftOS 1.8 using
+CC: Tweaked 1.101.3 for Minecraft 1.16.5
+This console is capable of playing games written in txt files,
+formatted in a language called Goldscript.
+
+All APIs used to create Goldcube, required for essential features:
+cPrint by JesustheKiller
+Palette by CrazedProgrammer
+Surface 2 by CrazedProgrammer
+Settings File API by bwhodle
+Escaped Aliases & GoldcubeAPI by Missooni
+
+Special thanks to the creator of 'PAIN', LDDestroier;
+creator of ShEdit, LoganDark; creator of Sketch, oeed;
+and Jadin for helping design button noises!
+
+--
+
+Peripherals Guide
+[x1][x1][x1]
+[x1][x1][x1]
+[x2][x2][o][-]
+      [*]
+[ ] = 1 Block
+[x] = Advanced Monitor [Set 1 and Set 2]
+[o] = Advanced Computer
+[-] = Disk Drive
+[*] = Speaker
+
+A Goldcube system requires an advanced computer, with 1
+disk drive, 1 speaker, and 8 advanced monitors attached.
+
+--
+
+Accessibility Features for Players
+You can change the colors used for stat bars, buttons, and the in-game D-pad
+by editing the 'gcsystem' settings file. These values use cPrint aliases. 
+Alias Key:
+0 - white   | 1 - orange  | 2 - magenta
+3 - l.blue  | 4 - yellow  | 5 - l.green
+6 - l.pink  | 7 - gray    | 8 - l.gray
+9 - teal    | a - purple  | b - blue
+c - brown   | d - green   | e - red
+f - black
+
+Custom Palettes
+By default you have two palettes, gcp1 and gcp2. 
+You can add more using these files as guidelines.
+* A name must be defined in 'palettecfg' file.
+* Palettes must follow the 'gcp#' name formatting.
+
+--- 
+
+Guide To Creating Goldcube Games
+If you attempt to play a floppy disk that does not contain a
+'gcgame' folder, the system will copy a game template to the 
+disk and then restart.
+After the restart, the floppy disk will be playable and ready to edit.
+Use the cmd "label set right 'diskname'" to name your games.
+
+Game disks should contain the following folders and files:
+(files should not be renamed or converted to other formats)
+'gcgame/' <- game resources
+'gcgame/menu.nft' <- optional startup img
+'gcgame/game.lua' <- contains startup script
+'gcgame/gamefileDefault' <- game variables
+'gcgame/images/' <- game image folder
+'gcgame/stages/' <- game stages folder
+'gcgame/stages/1' <- default game stage (games need at least one stage)
+
+---
+
+Editing gamefileDefault Part 1
+You can set all of the variables that your game will use by editing the 'gamefileDefault' file
+You must include the '[Stats Page]' tag in every game, but you are not required to define values.
+Only variables named 'stat#' from numbers 1-19 will display on the stats page in games. 
+The number correlates to the line they are drawn on. 
+
+Formatting Example:
+savestate = 1
+[Stats Page]
+stat1 = "Name"
+stat2 = "Rusty"
+stat3 = 6
+stat3tag = "Age:"
+stat4 = "Progress"
+stat5 = 0
+stat5max = 10
+collected = "bone"
+
+All things under [Stats Page] are optional
+values defined by users.
+
+---
+
+Editing gamefileDefault Part 2
+You can change how some variables will appear when drawn on the stats page by defining 'max' or 'tag' values.
+Only one will work at a time.
+
+Default:
+stat1 = 5 (Output: 5)
+
+Drawn as a meter (max)
+stat1 = 5
+stat1max = 10 (Output: a bar filled in halfway)
+
+Drawn with a prefix (tag) * tags can be used with all values
+stat1 = 5
+stat1tag = "Days left: " (Output: Days left: 5)
+
+---
+
+Editing gamefileDefault Part 3
+Your game should always have a 'savestate' value above the necessary [Stats Page] tag.
+Any values written above [Stats Page] will not be read by games, except for 'savestate'.
+In your default game file, you can use 'savestate' to define what stage players will start in when they play
+your game for the first time.
+When stage files are loaded through gameplay, the console autosaves progress in games and overwrites this value.
+
+---
+
+Writing Stage Files Part 1
+Each stage is a text file, named anything you want. They will contain all of your gameplay elements.
+it's optional if you want to add the file extention, but you must write the complete stage name in all references to it.
+
+Now, here is a complete glossary of Goldscript syntax with usage examples:
+
+> Print text quickly
+syntax: > string
+
+>!Print text instantly
+syntax: >!string
+
+>?Print text slowly
+syntax: >?string
+
+---
+Writing Stage Files Part 2
+v Wait for any user touch input to proceed, creates a newline
+syntax:v
+
+v>Wait for user touch input to proceed, does not create a newline
+syntax:v>
+
+v 1.5 Wait for a certain amount of seconds, and then proceed after making a newline
+syntax:v int
+
+v>1.5 Wait for a certain amount of seconds, then proceed without making a newline
+syntax:v int
+
+Touch commands detect player right-clicks on any external monitor.
+
+---
+
+Writing Stage Files Part 3
+[ bgimage.nft Change the current background image.
+syntax:[ filename.ext
+
+[ Clear the image monitor and remove the background image
+syntax:[
+
+[$f Change the background color on the upper monitor and redraw the background img
+syntax:[$CprintAlias
+
+{>Print text on the image monitor[1,1][0,f]
+syntax: {>string[x,y][bgCode,txtCode]
+
+{ character.nft[1,1] Draw an image on the upper monitor
+syntax: { filename.ext[x,y]
+
+The image monitor is 57x24; All images must exist in /gcgame/images/ but they can be nested in folders
+You can print blank characters to 'erase' text on the upper monitors or draw bars.
+
+---
+
+Writing Stage Files Part 4
++ ui.button.click[1,1] Play a noise on the speaker
+Volume can be between 0-3, Pitch can be between 0.5 and 2
+syntax: + sound[volume,pitch]
+
+Uses the block file names from sounds.json, available to reference on the official Minecraft wiki.
+
+* label|label[stat+5][stat-5] 
+syntax: * label1|label2[stat(op)value][stat(op)value]
+
+Creates two buttons on the lower screen for the user to choose from. 
+All button and D-Pad labels can only be up to 6 characters in length. All available operations can be viewed further down.
+
+---
+
+Writing Stage Files Part 5
+? [stat+1] Manually set or compare variables without user input
+syntax: ? [stat(op)value]
+When using <, > or = this command will ONLY run the next line if return = true.
+
+? [stat=1]
+> Output is true!
+
+ If you use a comma as an operation here, you can let a user manually assign a value by typing into  the terminal.
+? [stat,Example string]
+Your string will be the prompt that displays on the screen to let users know they need to input a value. Inputs can always be a string or number.
+
+---
+
+Writing Stage Files Part 6
+- anchor Creates an anchor which will skip every line until it hits another anchor that shares the same name. 
+syntax: 
+- anchor
+> Skipped code
+- anchor
+
+You can use the same name for more than two anchors,
+but they will always move down to the closest match in their path. All anchors must have another anchor to wrap to.
+
+-*[x][x][x][x] Creates anchors in the form of a D-pad on the lower screen the user can choose from. At least one anchor should be defined.
+[x] or [label|anchor]
+Must have values inside all four brackets. Use x to avoid drawing buttons. Follows N-S-W-E format.
+
+---
+
+Writing Stage Files Part 7
+-^[a1][a2][a3][a4][a5][a6][a7][a8][a9] 
+
+Creates anchors in the form of 
+interactive regions on your upper monitor the user can right click. If you do not need functionality for any of these regions, you can wrote [x] instead.
+When using this, you can assign multiple regions to the same anchor. This will always follow a N-C-S-NW-W-SW-NE-E-SE format.
+Using this command does not draw any new images or labels on your monitors.
+Example of 'left' and 'right' movement options:
+-^[x][x][x][left][left][left][right][right][right]
+
+---
+
+Writing Stage Files Part 8
+~ stagename Change to another stage file in the '/gcgame/stages/' folder. Can be in a nested directory
+syntax: ~ stagefile
+
+Available Operations:
+stat-value = subtract value from stat
+stat+value = add value to stat
+stat*value = multiply stat by value
+stat/value = divide stat by value
+stat<value = passes true if stat less than value*
+stat>value = passes true if stat more than value*
+stat=value = passes true if stat equal to value*
+stat:value = change stat to value
+stat?number = change stat to random number between 1 and value
+stat,string = let user define value
+* Only for ? commands.
+= can also compare text.
+
+---
+
+Writing Stage Files Part 9
+You can use cPrint formatting in your vallues and most commands, whereas $ will set background color, and & will set text color.
+Example: $3&bText becomes 'Text' in blue on a light blue background when drawn.
+
+Newlines (\n), horizontal tabs (\t) and most unicode symbols such as \3 can be added to stage files, but you must always format numbers with three digits. \3 should be written as \003
+
+If you want to display a value you've set in your gamefile in a string or label, escape the name in underscores like _this_
+
+---
+
+Writing Stage Files Part 10
+If you want to compare values to other values, you should use underscores as well. (stat1=_stat2_)
+You can also use values in place of anchor names, as long as the value references an existing anchor.
+For user accessibility, game files can't manually change the colors of D-pad and button labels, but they can use unicode characters.
+Some characters (like :) can break formatting when used in a stat tag, you can replace them with the unicode equivilent (\058)
+Each game start noise is randomly generated based on the disk label.
+
+---
+
+Extended Credits
+I'm not very familiar with Lua, so I've always ignored computers whenever I'm playing modded MC.
+That being said, when I found out about the ComputerCraft forums, my attitude changed completely. 
+
+CC is now one of my favorite mods! I've spent ages downloading as many games and 'fun' programs as I can.
+
+It's been so inspiring to see the incredible things people are capable of making, but theres a bittersweet reality to face...
+
+---
+
+Extended Credits
+It took me years to give CC a chance, and the most popular days of its existance are long gone. 
+
+It's a difficult mod for people to learn and engage with, for that reason, learning resources are rare and new programs are few and far between.
+
+This is what motivated me to create Goldcube.
+I wanted to make it easier for visually oriented people to create games using CC. It started as a visual novel API, but is now capable of so much more!
+
+This could not have existed without the APIs used to bring game functions together. I can't put into words how grateful I am for the resources and tutorials provided by others.♥
+
+---
+
+Thank You!
+
+Outside of Minecraft, I'm a furry artist with a coding hobby. You can visit me on FurAffinity @ Missooni.
+
+---
+
+Update 1.4 - Changelog
+* Console files are portable, all dependencies must exist in the same directory or folder.
+API files are now contained inside of the 'apis' folder, palettes and system settings are
+inside 'apis/cfg'. The folder containing the console start animation has been moved inside of 'docs'.
+
+* The console is now compatible with multishell! If you want to reset the color palette in a specific shell, use
+"apis/palette --reset" If you're running the system from a folder called 'goldcube' the command will be "goldcube/apis/palette --reset"
+
+---
+
+Update 1.4 - Changelog
+* It is now possible to create plugins. There is a new 'plugins' directory and some documentation on doing so.
+The console menu now features a little plug icon you can interact with to view installed plugins.
+
+* Games can run from any directory now, but the 'Play Game Disk' functionality remains unchanged.
+Template has been updated, game.lua now contains 'initiate(fs.getDir(shell.getRunningProgram()))'
+This line of code is required for games to run.
+---
+
+Making Plugins
+All plugins need their own folder in the 'plugins' directory.
+(It can be named anything)
+"/consoleDir/plugins/yourPlugin"
+
+Inside this folder, create two files, 'init.lua' and 'info.txt'
+The console will display folder names from the 'Installed Plugins' menu.
+'init.lua' will be the script used when your plugin is launched.
+
+---
+
+Making Plugins
+Programs designed to be plugins will have access to all of the APIs that come installed with Goldcube, on
+top of whatever APIs or programs you have installed to your system already.
+Use 
+multishell.setTitle(multishell.getCurrent(), "t")
+in your init.lua to set the tab name when launched in multishell.
+
+Here's some light documentation on Goldcube console APIs and some of their functions:
+
+---
+
+API Guide Part 1
+
+goldcubeAPI - Contains some generic functions and everything used to run Goldcube games. 
+Most functions are not made to be used on their own.
+
+goldcubeapi.delay(seconds) Similar to os.sleep, doesn't drop inputs.
+goldcubeapi.moveMousePos(x,y) Move cursor relative to current position, accepts negative values.
+goldcubeapi.easyTouch() Waits until user touches one of the external monitors before proceeding.
+goldcubeapi.initiate(gameDir) Launch a game. Needs to point to a valid "folder/" which contains a gamefile and at least one stage.
+
+---
+API Guide Part 2
+
+cprint - Print and write colored text using formatting tags. All codes are available on Pg.3
+cprint.cCode(val) Converts formatting codes into colors.* vars.
+cprint.cprint(string)  print() with formatting.
+cprint.cwrite(string) write() with formatting.
+cprint.clear() Resets foreground, background color and mouse position in terminal.
+
+escalias - Fixes text read from files.
+escalias.fix(string) Parses newlines, tabs, and unicode read from files.
+escalias.parseOps(val1, op, val2) Parses math equations from text, such as "8*3"
+
+---
+API Guide Part 3
+
+palette - Recolor the terminal and any wrapped monitor using palette files.
+This is not an API, but a runnable program. Here's an example with syntax:
+palette palettefile
+/gcDir/apis/palette /gcDir/apis/cfg/gcp1
+
+To reset any terminal or monitor palette:
+/gcDir/apis/palette --reset
+
+---
+API Guide Part 4
+
+settingfile - Create configuration files in a simpler format than the default settings API.
+File setup example:
+Style 1
+
+val = 5
+[Section Name]
+secval = string
+
+Style 2
+
+val : 5
+[Section Name]
+secval : string
+
+file = settingfile.openSettingsFile("/filepath")
+file.setValue("valname","value")
+file.getValue("valname")
+file.setSectionedValue("sectionname","valname","value")
+file.getSectionedValue("sectionname","valname")
+
+Values can be organized under named [sections]. Use ; to write comments.
+
+---
+API Guide Part 5
+
+surface - Easily display images and text on terminals and monitors.
+
+local surfapi = dofile("/goldcubeDir/apis/surface")
+
+surfbg = colors.black
+surface = surfapi.create(51, 19, surfbg)
+.create will make a surface window in any size. The standard resolution for terminals is 51x19
+
+surfimg = surfapi.load("/filepath")
+surface:drawSurface(surfimg, 0, 0)
+:drawSurface will draw a loaded image or surface on top of another surface.
+
+---
+API Guide Part 6
+
+surface:drawString(string, x, y, bgCol, txtCol)
+When you're done assigning elements to a surface,
+use :output to draw it on a monitor. 
+
+surface:output()
+or
+surface:output(monitorObj, x, y)

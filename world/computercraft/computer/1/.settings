@@ -1,0 +1,5 @@
+{
+  [ "minex.programs.nfp" ] = "paint",
+  [ "sword.checkForUpdates" ] = true,
+  [ "minex.default_program" ] = "edit",
+}

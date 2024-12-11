@@ -1,0 +1,44 @@
+print("ari's piano - use qwerty to play (:")
+speaker = peripheral.find("speaker")
+while true do
+  local event, key, isHeld = os.pullEvent("key")
+  
+  if key == keys.q then
+      print ("G")
+      speaker.playSound("minecraft:block.note_block.harp",2,.53)
+      elseif key == keys.two then
+      print ("G#")
+      speaker.playSound("minecraft:block.note_block.harp",2,.572)
+      elseif key == keys.w then
+      print ("A")
+      speaker.playSound("minecraft:block.note_block.harp",2,.595)
+      elseif key == keys.three then
+      print ("A#")
+      speaker.playSound("minecraft:block.note_block.harp",2,.63)
+      elseif key == keys.e then 
+      print ("B")
+      speaker.playSound("minecraft:block.note_block.harp",2,.67)
+      elseif key == keys.r then
+      print ("C")
+      speaker.playSound("minecraft:block.note_block.harp",2,.71)
+      elseif key == keys.five then
+      print ("C#")
+      speaker.playSound("minecraft:block.note_block.harp",2,.75)
+      elseif key == keys.t then
+      print ("D")
+      speaker.playSound("minecraft:block.note_block.harp",2,.795)
+      elseif key == keys.six then
+	  print ("D#")
+      speaker.playSound("minecraft:block.note_block.harp",2,.84)
+      elseif key == keys.y then
+      print ("E")
+      speaker.playSound("minecraft:block.note_block.harp",2,.89)
+      elseif key == keys.u then 
+      print ("F")
+      speaker.playSound("minecraft:block.note_block.harp",2,.945)
+      elseif key == keys.i then
+      print ("F#")
+      speaker.playSound("minecraft:block.note_block.harp",2,1.0625)
+ 
+end
+end

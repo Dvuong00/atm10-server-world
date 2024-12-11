@@ -1,0 +1,12 @@
+-- just a way for a gui to identify working apps it can use.
+term.clear()
+term.setCursorPos(1,1)
+print("This will clear out the current disk and create a boot disk")
+print("hit enter to continue or ctrl+t to quit")
+read()
+shell.run("rm /disk/*")
+shell.run("/bin/makeboot.sh")
+print("")
+print("done, you can now remove your disk.")
+print("hit enter to continue")
+read()

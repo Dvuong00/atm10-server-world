@@ -1,0 +1,43 @@
+local projectId = 114
+
+print("Fetching install command...")
+local res = http.get("https://pinestore.cc/api/project/" .. projectId)
+if not res then
+	error("Unable to install program. Make sure pinestore.cc is whitelisted!")
+end
+local raw = res.readAll()
+res.close()
+local data = textutils.unserialiseJSON(raw)
+if not data then
+	error("Something went wrong. Raw data received:\n" .. (raw or "nil"))
+end
+if not data.success then
+	error("Error: " .. data.error)
+end
+local project = data.project
+local install_command = project.install_command
+
+local someError = nil
+local someErrorMessage = nil
+local oldPcall = _G.pcall
+_G.pcall = function(func, ...)
+	local success, ret1, ret2, ret3, ret4 = oldPcall(func, ...)
+	if not success and not someError then
+		someError = true
+		someErrorMessage = ret1
+	end
+	return success, ret1, ret2, ret3, ret4
+end
+shell.run(install_command)
+_G.pcall = oldPcall
+
+if someError then
+	print("Error during installation:")
+	print(someErrorMessage)
+else
+	local res = http.post("https://pinestore.cc/api/log/download", textutils.serialiseJSON({
+		projectId = projectId,
+	}), {["Content-Type"] = "application/json"})
+
+	print("Successfully installed! Have fun! :D")
+end

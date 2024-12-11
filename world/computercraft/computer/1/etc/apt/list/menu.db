@@ -1,0 +1,13 @@
+AIF
+/bin/minux.sh
+/etc/minux-main/menu/config.sys
+/etc/minux-main/menu/startup.sys
+/etc/minux-main/menu/update.sys
+/etc/minux-main/menu/login.sys
+/etc/minux-main/menu/debug.sys
+/etc/minux-main/menu/soft.sys
+/etc/minux-main/menu/auth.sys
+/etc/minux-main/menu/programs.sys
+/etc/minux-main/menu/network.sys
+/etc/minux-main/menu/favorites.sys
+/etc/minux-main/menu/bashcolors.sys

@@ -1,0 +1,89 @@
+-- config menu, part of main menu but can be called seperate
+
+local softmenuactive = true
+while softmenuactive == true do
+	local title = "Apt software manager"
+	local choices = {"return/exit", "list installed software", "list available software", "update software" , "install software" , "remove software" ," ","list available sources", "add software source", "remove software source"}
+	local actions = {}
+
+	actions[1] = function()
+	minux.debug("softmenu:return/exit" , "minux")
+	softmenuactive = false
+	end
+	actions[2] = function()
+	print("")
+	minux.debug("softmenu:listinstalled" , "minux")
+	print("Installed software:")
+	shell.run("/bin/apt.sh -l")
+	print("hit enter to continue")
+	read()
+	end
+	actions[3] = function()
+	print("")
+	minux.debug("softmenu:listavail" , "minux")
+	apt.softlist()
+	shell.run("/bin/apt.sh -la")
+	end	
+	actions[4] = function()
+	print("")
+	minux.debug("softmenu:update" , "minux")
+	apt.update()
+	print("hit enter to continue")
+	read()
+	end
+	actions[5] = function()
+		print("")
+		minux.debug("softmenu:install" , "minux")
+		print("what package to install?:")
+		local input = read()
+		if input ~= nil then
+			apt.install(input)
+		end
+	print("hit enter to continue")
+	read()
+	end
+	actions[6] = function()
+		print("")
+		minux.debug("softmenu:remove" , "minux")
+		print("What package to remove?:")
+		local input = read()
+		if input ~= nil then
+			apt.uninstall(input)
+		end
+	print("hit enter to continue")
+	read()
+	end
+	actions[7] = function()
+	end
+	actions[8] = function()
+	print("")
+	print("available sources")
+	minux.debug("softmenu:listsource" , "minux")
+	shell.run({},"/bin/less.sh /usr/apt/source.ls")
+	print("hit enter to continue")
+	read()
+	end
+	actions[9] = function()
+		print("")
+		minux.debug("softmenu:addsource" , "minux")
+		print("add source url:")
+		local input = read()
+		if input ~= nil then
+			apt.addsource(input)
+		end
+	print("hit enter to continue")
+	read()
+	end
+	actions[10] = function()
+		print("")
+		minux.debug("softmenu:delsource" , "minux")
+		print("remove source url:")
+		local input = read()
+		if input ~= nil then
+			apt.clearsource(input)
+		end
+	print("hit enter to continue")
+	read()
+	end
+	menu.menuOptions(title, choices, actions)
+end

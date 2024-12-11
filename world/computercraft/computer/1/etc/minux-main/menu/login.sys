@@ -1,0 +1,30 @@
+-- login config menu
+local loginmenu = true
+while loginmenu == true do
+	local loginsetting = minux.getconfig("login")
+	local title = "Minux AUTH setting:"..loginsetting
+	local choices = {}
+	if pocket then
+		choices = {"return/exit", "disable - no login", "local - local login", "networked - full network"}
+	else
+		choices = {"return/exit", "disable - no login required - no network", "local - local storage - no network", "networked - AUTH storage - full network"}
+	end
+	local actions = {}
+
+	actions[1] = function()
+	loginmenu = false
+	end
+	actions[2] = function()
+	minux.debug("logcfg:disabled" , "minux")
+	minux.setconfig("login","disabled")
+	end
+	actions[3] = function()
+	minux.debug("logcfg:local" , "minux")
+	minux.setconfig("login","local")
+	end
+	actions[4] = function()
+	minux.debug("logcfg:networked" , "minux")
+	minux.setconfig("login","network")
+	end	
+	menu.menuOptions(title, choices, actions)
+end

@@ -1,0 +1,943 @@
+-- minux main api's
+-- recursive listing
+function lsr(pathname)
+	expect(1, pathname, "string")
+-- catch invalid input
+	if fs.exists(pathname) == false then return false end
+	if fs.isDir(pathname) == false then return false end
+-- cleanup of previous search tempfiles, in case of conflict
+	if fs.exists("/temp/ls/files.ls") then fs.delete("/temp/ls/files.ls") end
+	if fs.exists("/temp/ls/todo") then fs.delete("/temp/ls/todo") end
+-- doing first path listing
+	local lsfoldercount = 0
+	minux.list(pathname,lsfoldercount)
+-- look for a folder file in the todo list, grab it, process it, repeat. if none, end.
+	local todofolderfile = "start"
+	while todofolderfile ~= nil and tofolderfile ~= "" and fs.exists("/temp/ls/todo/") do
+		local todofolderlist = fs.list("/temp/ls/todo/")
+		todofolderfile = todofolderlist[1]
+		if todofolderfile ~= nil then
+			if fs.exists("/temp/ls/todo/"..todofolderfile) then
+-- read the file, process it.
+				local line = "start"
+				local todofile = fs.open("/temp/ls/todo/"..todofolderfile , "r")
+				while line ~= nil do
+					line = todofile.readLine()
+					if line ~= nil then minux.list(line, lsfoldercount) end
+				end
+				todofile.close()
+				fs.delete("/temp/ls/todo/"..todofolderfile)
+			end
+		else
+			todofolderfile = nil
+		end
+		lsfoldercount = lsfoldercount + 1
+	end
+end
+
+-- this file does the actual fs.list and writes it down in a temp file
+function list(pathname, lsfoldercount)
+	expect(1,pathname, "string")
+	expect(2,lsfoldercount,"number")
+-- catch invalid input
+	local tempfile = fs.list(pathname)
+	local count = 1
+	local filename = tempfile[count]
+	local filelist = fs.open("/temp/ls/files.ls" , "a")
+	while filename ~= nil do
+		if fs.isDir(pathname..filename) then
+			local folderfile = fs.open("/temp/ls/todo/"..lsfoldercount..".ls" , "a")
+			folderfile.writeLine(pathname..filename.."/")
+			folderfile.close()
+			count = count + 1
+			filename = tempfile[count]
+		elseif fs.exists(pathname..filename) then
+			filelist.writeLine(pathname..filename)
+			count = count + 1
+			filename = tempfile[count]
+		else filename = nil end
+	end
+	filelist.close()
+end
+
+-- ls -a listing, additional info
+function lsa(pathname)
+	local tempfile = fs.list(pathname)
+	local count = 1
+	local filename = tempfile[count]
+	local filelist = fs.open("/temp/ls/a.ls" , "w")
+	while filename ~= nil do
+		if fs.isDir(pathname..filename) then
+			filelist.writeLine("DIR:"..pathname..filename)
+			count = count + 1
+			filename = tempfile[count]
+		elseif fs.exists(pathname..filename) then
+			local filesize = fs.getSize(pathname..filename)
+			filelist.writeLine("File:"..pathname..filename.." "..filesize.."b")
+			count = count + 1
+			filename = tempfile[count]
+		else filename = nil end
+	end
+	filelist.writeLine("Free space:"..fs.getFreeSpace(pathname).." bytes")
+	filelist.close()
+end
+
+-- login system
+function logintype()
+	authtype = minux.getconfig("login")
+	return authtype
+end
+
+function login(login, password)
+	expect(1, login, "string")
+	expect(2, password, "string")
+	local authtype = logintype()
+-- remember valid logins
+	if _G.validlogin == true then
+		minux.debug("login:valid login detected" , "minux")
+		wasvalid = true
+		tadmin = _G.admin
+		tlogin = _G.login
+		tpass = _G.masterpass
+	end
+-- before we begin for real we clear the values and reset everything, to be safe.
+	_G.admin = false
+	_G.login = false
+	_G.masterpass = false
+	_G.validlogin = false
+-- local login
+	if authtype == "local" then
+		minux.debug("login:local" , "minux")
+		minux.debug("login: searching user file" , "minux")
+		if fs.exists("/usr/local/auth/"..login..".usr") then
+			minux.debug("login:u-"..login , "minux")
+			file = fs.open("/usr/local/auth/"..login..".usr" , "r")
+			local Spass = file.readLine()
+			file.close()
+			local user = login
+			minux.debug("login:reading user file" , "minux")
+			if password == Spass then
+				_G.validlogin = true
+				_G.login = user
+				minux.debug("login:granted:U-"..login , "login")
+				if login == "root" then
+					minux.debug("login:admin" , "login")
+					_G.login = user
+					_G.admin = true
+					_G.owner = true
+				end
+				print("Access granted!")
+				minux.debug("login:granted" , "minux")
+				return true
+			else
+				minux.debug("login:denied:U-"..login , "login")
+				print("Access denied!")
+				minux.debug("login:denied" , "minux")
+			end
+		else
+			minux.debug("login:noexist:U-"..login , "minux")
+			print("User does not exist!")
+		end
+-- network login
+	elseif authtype == "network" then
+		minux.debug("Nlogin:starting" , "login")
+-- if dhcp is unknown, attempt to find it
+		if _G.server == nil or _G.server == "[none]" then
+			minux.debug("nlogin:searching dhcp" , "minux")
+			os.run({} , "/boot/network/dhcp.sys")
+		end
+		if _G.server == nil or _G.server == "[none]" then
+			minux.debug("login:E:204:DHCP not found" , "minux")
+			print("install a dhcp server first or set login to local")
+			sleep(5)
+		end
+-- searching auth details
+		print("Connecting to AUTH server...")
+		rednet.send(_G.server , "AUTH-ID")
+		minux.debug("login:AUTH-REQ-".._G.server , "minux")
+		loopcount = 0
+		while loopcount ~=3 do
+			loopcount = loopcount + 1
+			temp, data = rednet.receive(1)
+			minux.debug("login:request count:"..loopcount , "minux")
+			if temp == _G.server then
+				minux.debug("login:DHCP-reply" , "minux")
+				if data == "AUTH-NOEXIST" then
+					minux.debug("login:E:205:noauth" , "minux")
+					print("error:no auth server found, install one first.")
+					print("Ensure the DHCP server knows who the AUTH server is")
+					sleep(3)
+				elseif data == nil or data == "" then
+					minux.debug("login:E:206:Data nil error" , "minux")
+					print("error:the auth server data is invalid")
+					print("Check the DHCP's AUTH server settings")
+					sleep(3)
+				else
+					tempauth = tonumber(data)
+					minux.debug("login:auth-server:"..tempauth , "minux")
+					print(data)
+					data = nil
+				end
+				loopcount = 3
+			end
+		end
+		if tempauth == nil then
+			print("Auth unknown, cannot connect.")
+			minux.debug("nlogin:E:209" , "minux")
+			sleep(2)
+		end
+-- check if this system has ownership rules
+		minux.debug("login:checking for ownership" , "minux")
+		_G.owner = false
+		_G.ownergroup = false
+		if fs.exists("/usr/auth-client/owner.cfg") then
+			minux.debug("login:owner file found, running check" , "minux")
+			auth.checkowner()
+		else
+			minux.debug("login:no owner file" , "minux")
+		end
+		minux.debug("login:initiating login" , "minux")
+		rednet.send(tempauth , "AUTH-LOGIN")
+		loopcount = 0
+		temp, data = rednet.receive(1)
+		if temp == tempauth then
+			if data == "AUTH-ACK" then
+				minux.debug("login:auth-ack" , "minux")
+				_G.authserver = tempauth
+			else
+				minux.debug("login:E:207:auth-reply-noack" , "minux")
+			end
+		else
+			minux.debug("login:E:208:auth-noreply" , "minux")
+		end
+		if _G.authserver == nil or _G.authserver == "" then
+			minux.debug("login:E:209:auth connect error" , "minux")
+			print("cannot contact the AUTH server")
+			print("Check if your AUTH server is online and in reach")
+			sleep(3)
+		end
+		minux.debug("login:auth:".._G.authserver , "minux")
+-- we try to log in with provided credentials
+		minux.debug("building netlib table","minux")
+		local sendtable = {}
+		sendtable[1] = login
+		sendtable[2] = password
+		minux.debug("login:u-"..sendtable[1] , "minux")
+		local reply = netlib.sendtable(_G.authserver, sendtable)
+		if reply == true then
+			minux.debug("login:data Sync success" , "minux")
+		else
+			minux.debug("login:E:210:data sync error" , "minux")
+			print("AUTH:SYNC:ERROR")
+			print("failed to syncronise/transfer user data")
+			print("if this persists there may be a system spamming the network trough broadcast or in a reboot loop")
+			sleep(3)
+			return false
+		end
+-- we receive the reply
+		local data = netlib.getstring(_G.authserver, 1)
+		minux.debug("login:processing response" , "minux")
+		if data == "accept" then
+			minux.debug("login:credentials accepted" , "minux")
+		-- if the user is the owner or member of the group then he's cleared as well
+			if _G.owner ~= false then
+				if _G.owner == login then
+					minux.debug("login:user=owner:ADMIN granted:"..login , "login")
+					_G.admin = true
+					_G.login = login
+					_G.masterpass = password
+					_G.validlogin = true
+				elseif _G.ownergroup ~= false then
+					minux.debug("login:groupname=true" , "minux")
+					auth.checkgroup(_G.ownergroup , login)
+					if _G.isgroupmember == true then
+						minux.debug("login:user=groupmember:USER granted:"..login , "login")
+						_G.validlogin = true
+						_G.login = login
+						_G.masterpass = password
+					else
+						minux.debug("login:auth-denied:"..login , "login")
+						minux.debug("login:user~=groupmember:denied" , "minux")
+					end
+				end
+			else
+				minux.debug("login:nogroup:USER granted:"..login , "login")
+				_G.login = login
+				_G.masterpass = password
+				_G.validlogin = true
+			end
+		elseif data == "admin" then
+			minux.debug("login:granted-admin:"..login , "login")
+			_G.admin = true
+			_G.login = login
+			_G.masterpass = password
+			_G.validlogin = true
+		else
+			minux.debug("login:denied" , "login")
+		end
+		if _G.admin == true then
+			print("Admin/owner access")
+			minux.debug("login:ADMIN:".._G.login , "minux")
+		elseif _G.validlogin == true then
+			print("User access")
+			minux.debug("login:USER:".._G.login , "minux")
+		else
+			print("Access denied!")
+			minux.debug("login:DENIED:"..login , "minux")
+		end
+	end
+-- if login failed, we reset
+	if wasvalid == true then
+		wasvalid = false
+		_G.admin = tadmin
+		_G.login = tlogin
+		_G.masterpass = tpass
+	end
+	return false
+end
+
+function lock()
+	if logintype() ~= "disabled" then
+		term.clear()
+		term.setCursorPos(1,1)
+		print("Minux V:".._G.version)
+		print(" ")
+		print("This system is currently locked by user:".._G.login)
+		print("type the password to unlock this system")
+		print("if you already unlocked it, hit enter")
+		print(" ")
+		_G.lockactive = true
+			while _G.lockactive == true do
+			write("password:")
+			input = read("*")
+			if _G.lockactive == false then return 0 end
+			if input == _G.masterpass then _G.lockactive = false
+			else print("Wrong password") end
+		end
+	else
+		print("cannot enable lock with users disabled")
+		print("hit enter to continue")
+		read()
+	end
+end
+
+-- sanity check
+function sanitycheck()
+	-- network dependency check
+	local dorestart = false
+	if logintype() == "network" and auth == nil then
+		term.clear()
+		term.setCursorPos(1,1)
+		print("downloading auth libraries")
+		apt.install("auth-client")
+		apt.install("netlib")
+		apt.aliasbuild()
+		apt.bootbuild()
+		dorestart = true
+	end
+	if logintype() == "network" and netlib == nil then
+		print("downloading network libraries")
+		apt.install("netlib")
+		apt.aliasbuild()
+		apt.bootbuild()
+		dorestart = true
+	end
+	-- trigger update and bootbuild on clean install to finish the process
+	if _G.version == "cleaninstall" then
+		print("finishing install")
+		apt.update()
+		print("building boot addons")
+		apt.aliasbuild()
+		apt.bootbuild()
+		dorestart = true
+	end
+	-- set network enabled if login is network
+	if minux.logintype() == "network" and minux.getconfig("network") == "disabled" then
+		minux.setconfig("network","enabled")
+	end
+	-- create root user on local login
+	while fs.exists("/usr/local/auth/root.usr") == false and authtype == "local" do
+		term.clear()
+		term.setCursorPos(1,1)
+		minux.debug("login:E:201:no root user" , "minux")
+		print("root account does not exist")
+		print("Creating root user:")
+		print(" ")
+		write("please enter the root password:")
+		newpass = read("*")
+		write("please re-enter the root password:")
+		newpass2 = read("*")
+		if newpass ~= nil and newpas ~= "" and newpass == newpass2 then
+			minux.debug("login:creating user" , "minux")
+			file = fs.open("/usr/local/auth/root.usr","w")
+			file.write(newpass)
+			file.close()
+			minux.debug("login:root account created." , "minux")
+			dorestart = true
+		else
+			minux.debug("login:rootcreate:invalid data" , "minux")
+			print("invalid data, try again")
+			sleep(1)
+		end
+	end
+	local colordata = {}
+	colordata = minux.getbashcolor()
+	if colordata[1] == colordata[2] then
+		minux.debug("Prompt and bg color are idenitical, changing bgcolor","minux")
+		if colordata[4] ~= "black" then
+			colordata[5] = "black"
+		else
+			colordata[5] = "white"
+		end
+		minux.bashcolor(colordata[4], colordata[5], colordata[6])
+	end
+	if fs.exists("/usr/minux-main/settings.cfg") == false then
+		minux.debug("generating settings file","minux")
+		local tempfile = fs.open("/usr/minux-main/settings.cfg","w")
+		tempfile.writeLine("login=disabled")
+		tempfile.writeLine("debug=disabled")
+		tempfile.writeLine("welcome=enabled")
+		tempfile.writeLine("update=disabled")
+		tempfile.writeLine("network=disabled")
+		tempfile.close()
+	end
+	if minux.findline("/usr/minux-main/settings.cfg","network=") == false then minux.insertline("/usr/minux-main/settings.cfg","network=disabled") end
+	if minux.findline("/usr/minux-main/settings.cfg","login=") == false then minux.insertline("/usr/minux-main/settings.cfg","login=disabled") end
+	if minux.findline("/usr/minux-main/settings.cfg","debug=") == false then minux.insertline("/usr/minux-main/settings.cfg","debug=disabled") end
+	if minux.findline("/usr/minux-main/settings.cfg","welcome=") == false then minux.insertline("/usr/minux-main/settings.cfg","welcome=enabled") end
+	if minux.findline("/usr/minux-main/settings.cfg","ui=") == false then
+		if minux.findline("/etc/apt/list/installed","menu") ~= false then
+			minux.insertline("/usr/minux-main/settings.cfg","ui=menu")
+		else
+			minux.insertline("/usr/minux-main/settings.cfg","ui=workspace")
+		end
+	end
+	if minux.findline("/usr/minux-main/settings.cfg","update=") == false then minux.insertline("/usr/minux-main/settings.cfg","update=disabled") end
+	if minux.findline("/usr/minux-main/settings.cfg","crashhandler=") == false then minux.insertline("/usr/minux-main/settings.cfg","crashhandler=enabled") end
+
+	-- check if menu is installed if it is also selected
+	if minux.getconfig("ui") =="menu" and minux.findline("/etc/apt/list/installed.db","menu") == false then
+		apt.install("menu")
+		dorestart = true
+	end
+	if dorestart == true then
+		print("restarting system, please wait")
+		os.sleep(2)
+		minux.restart()
+	end
+end
+
+-- find peripherals
+function perfind(type)
+	expect(1, type, "string")
+	if(peripheral.getType("top")) == type then
+		return "top"
+	elseif(peripheral.getType("back")) == type then
+		return "back"
+	elseif(peripheral.getType("bottom")) == type then
+		return "bottom"
+	elseif(peripheral.getType("right")) == type then
+		return "right"
+	elseif(peripheral.getType("left")) == type then
+		return "left"
+	elseif(peripheral.getType("front")) == type then
+		return "front"
+	else
+		return "NONE"
+	end
+end
+
+-- monitorprint, quick and dirty printing on a monitor
+function monitorprint(printstring)
+	expect(1, printstring, "string")
+	if _G.monitorside == "NONE" then return false end
+	if printstring == nil then return false end
+	local oldTerm = term.redirect(_G.monitor)
+	print(printstring)
+	term.redirect(oldTerm)
+	return true
+end
+
+-- minux configuration
+function getconfig(value)
+	expect(1, value, "string")
+	if value ~= nil then
+		if value == "login" then
+			if minux.findline("/usr/minux-main/settings.cfg", "login=local") then return "local"
+			elseif minux.findline("/usr/minux-main/settings.cfg", "login=network") then return "network"
+			else return "disabled" end
+			return tempdata
+		elseif value == "crashhandler" then
+			if minux.findline("/usr/minux-main/settings.cfg", "crashhandler=disabled") then return "disabled"
+			else return "enabled" end
+		elseif value == "network" then
+			if minux.findline("/usr/minux-main/settings.cfg", "network=enabled") then return "enabled"
+			else return "disabled" end
+		elseif value == "ui" then
+			if minux.findline("/usr/minux-main/settings.cfg", "ui=prompt") then return "prompt"
+			elseif minux.findline("/usr/minux-main/settings.cfg", "ui=craftos") then return "craftos"
+			elseif minux.findline("/usr/minux-main/settings.cfg", "ui=menu") then return "menu"
+			else return "workspace" end
+			return tempdata
+		elseif value == "debug" then
+			if minux.findline("/usr/minux-main/settings.cfg", "debug=enabled") then return "enabled"
+			elseif minux.findline("/usr/minux-main/settings.cfg", "debug=logging") then return "logging"
+			elseif minux.findline("/usr/minux-main/settings.cfg", "debug=full") then return "full"
+			else return "disabled" end
+		elseif value == "update" then
+			if minux.findline("/usr/minux-main/settings.cfg", "update=enabled") then return "enabled"
+			elseif minux.findline("/usr/minux-main/settings.cfg", "update=always") then return "always"
+			else return "disabled" end
+		elseif value == "welcome" then
+			if minux.findline("/usr/minux-main/settings.cfg", "welcome=enabled") then return "enabled"
+			else return "disabled" end
+		else
+			return false
+		end
+	else
+		return false
+	end
+end
+
+function setconfig(config,setting)
+	expect(1, config, "string")
+	expect(2, setting, "string")
+-- error catcher
+	if _G.admin ~= true and _G.owner ~= _G.login then
+		minux.debug("config:denied! not admin or owner" , "login")
+		return false
+	end
+	minux.debug("config:login:granted" , "minux")
+
+-- login type
+	if config == "login" then
+		minux.debug("config:option:login" , "minux")
+		if setting == "local" or setting == "network" or setting == "disabled" then
+			local settingline = minux.findline("/usr/minux-main/settings.cfg","login=")
+			minux.removeline("/usr/minux-main/settings.cfg",settingline)
+			minux.insertline("/usr/minux-main/settings.cfg","login="..setting)
+			minux.debug("config:login:"..setting , "minux")
+			minux.sanitycheck()
+			return true
+		else
+			minux.debug("config:login-invalid setting" , "minux")
+			return false
+		end
+	elseif config == "crashhandler" then
+		minux.debug("config:option:crashhandler" , "minux")
+		if setting == "disabled" or setting == "enabled" then
+			local settingline = minux.findline("/usr/minux-main/settings.cfg","crashhandler=")
+			minux.removeline("/usr/minux-main/settings.cfg",settingline)
+			minux.insertline("/usr/minux-main/settings.cfg","crashhandler="..setting)
+			minux.debug("config:crashhandler:"..setting , "minux")
+			return true
+		else
+			minux.debug("config:network-invalid setting" , "minux")
+			return false
+		end
+	elseif config == "network" then
+		minux.debug("config:option:network" , "minux")
+		if setting == "disabled" or setting == "enabled" then
+			local settingline = minux.findline("/usr/minux-main/settings.cfg","network=")
+			minux.removeline("/usr/minux-main/settings.cfg",settingline)
+			minux.insertline("/usr/minux-main/settings.cfg","network="..setting)
+			minux.debug("config:network:"..setting , "minux")
+			return true
+		else
+			minux.debug("config:network-invalid setting" , "minux")
+			return false
+		end
+	elseif config == "update" then
+		minux.debug("config:option:update" , "minux")
+		if setting == "always" or setting == "enabled" or setting == "disabled" then
+			local settingline = minux.findline("/usr/minux-main/settings.cfg","update=")
+			minux.removeline("/usr/minux-main/settings.cfg",settingline)
+			minux.insertline("/usr/minux-main/settings.cfg","update="..setting)
+			minux.debug("config:update:"..setting , "minux")
+			return true
+		else
+			minux.debug("config:update-invalid setting" , "minux")
+			return false
+		end
+	elseif config == "welcome" then
+		minux.debug("config:option:welcome" , "minux")
+		if setting == "enabled" or setting == "disabled" then
+			local settingline = minux.findline("/usr/minux-main/settings.cfg","welcome=")
+			minux.removeline("/usr/minux-main/settings.cfg",settingline)
+			minux.insertline("/usr/minux-main/settings.cfg","welcome="..setting)
+			minux.debug("config:welcome:"..setting , "minux")
+			return true
+		else
+			minux.debug("config:login-invalid setting" , "minux")
+			return false
+		end
+	elseif config == "menu" or config == "ui" then
+		minux.debug("config:option:menu" , "minux")
+		if setting == "prompt" or setting == "menu" or setting == "workspace" or setting == "craftos" then
+			local settingline = minux.findline("/usr/minux-main/settings.cfg","ui=")
+			minux.removeline("/usr/minux-main/settings.cfg",settingline)
+			minux.insertline("/usr/minux-main/settings.cfg","ui="..setting)
+			minux.debug("config:ui:"..setting , "minux")
+			return true
+		else
+			minux.debug("config:menu-invalid input" , "minux")
+			return false
+		end
+	elseif config == "debug" then
+		minux.debug("config:option:debug" , "minux")
+		if setting == "enabled" or setting == "disabled" or setting == "logging" or setting == "full" then
+			local settingline = minux.findline("/usr/minux-main/settings.cfg","debug=")
+			minux.removeline("/usr/minux-main/settings.cfg",settingline)
+			minux.insertline("/usr/minux-main/settings.cfg","debug="..setting)
+			minux.debug("config:setting:"..setting , "minux")
+			_G.debugmode = setting
+			return true
+		else
+			minux.debug("config:debug-invalid setting" , "minux")
+			return false
+		end
+	else
+		minux.debug("config: invalid input" , "minux")
+		return false
+	end
+end
+
+-- bash colours
+function bashcolor(textcolor, backgroundcolor, promptcolor)
+	expect(1, textcolor, "string", "nil")
+	expect(2, backgroundcolor, "string", "nil")
+	expect(3, promptcolor, "string", "nil")
+	if textcolor == nil then textcolor = "white" end
+	if backgroundcolor == nil then backgroundcolor = "black" end
+	if promptcolor == nil then promtcolor = "yellow" end
+	local tempfile = fs.open("/usr/minux-main/bash/colours.cfg","w")
+	tempfile.writeLine(textcolor)
+	tempfile.writeLine(backgroundcolor)
+	tempfile.writeLine(promptcolor)
+	return true
+end
+
+function getbashcolor()
+	returntable = { }
+	if fs.exists("/usr/minux-main/bash/colours.cfg") and term.isColor() then
+		local tempfile = fs.open("/usr/minux-main/bash/colours.cfg","r")
+		tmptextColour = tempfile.readLine()
+		tmpbgColour = tempfile.readLine()
+		tmppromptColour = tempfile.readLine()
+		if tmptextColour == "white" then textColour = colors.white
+		elseif tmptextColour == "orange" then textColour = colors.orange
+		elseif tmptextColour == "magenta" then textColour = colors.magenta
+		elseif tmptextColour == "lightBlue" then textColour = colors.lightBlue
+		elseif tmptextColour == "yellow" then textColour = colors.yellow
+		elseif tmptextColour == "lime" then textColour = colors.lime
+		elseif tmptextColour == "pink" then textColour = colors.pink
+		elseif tmptextColour == "gray" then textColour = colors.gray
+		elseif tmptextColour == "lightGray" then textColour = colors.lightGray
+		elseif tmptextColour == "cyan" then textColour = colors.cyan
+		elseif tmptextColour == "purple" then textColour = colors.purple
+		elseif tmptextColour == "blue" then textColour = colors.blue
+		elseif tmptextColour == "brown" then textColour = colors.brown
+		elseif tmptextColour == "green" then textColour = colors.green
+		elseif tmptextColour == "red" then textColour = colors.red
+		elseif tmptextColour == "black" then textColour = colors.black
+		else textColour = colors.green end
+		if tmpbgColour == "white" then bgColour = colors.white
+		elseif tmpbgColour == "orange" then bgColour = colors.orange
+		elseif tmpbgColour == "magenta" then bgColour = colors.magenta
+		elseif tmpbgColour == "lightBlue" then bgColour = colors.lightBlue
+		elseif tmpbgColour == "yellow" then bgColour = colors.yellow
+		elseif tmpbgColour == "lime" then bgColour = colors.lime
+		elseif tmpbgColour == "pink" then bgColour = colors.pink
+		elseif tmpbgColour == "gray" then bgColour = colors.gray
+		elseif tmpbgColour == "lightGray" then bgColour = colors.lightGray
+		elseif tmpbgColour == "cyan" then bgColour = colors.cyan
+		elseif tmpbgColour == "purple" then bgColour = colors.purple
+		elseif tmpbgColour == "blue" then bgColour = colors.blue
+		elseif tmpbgColour == "brown" then bgColour = colors.brown
+		elseif tmpbgColour == "green" then bgColour = colors.green
+		elseif tmpbgColour == "red" then bgColour = colors.red
+		elseif tmpbgColour == "black" then bgColour = colors.black
+		else bgColour = colors.black end
+		if tmppromptColour == "white" then promptColour = colors.white
+		elseif tmppromptColour == "orange" then promptColour = colors.orange
+		elseif tmppromptColour == "magenta" then promptColour = colors.magenta
+		elseif tmppromptColour == "lightBlue" then promptColour = colors.lightBlue
+		elseif tmppromptColour == "yellow" then promptColour = colors.yellow
+		elseif tmppromptColour == "lime" then promptColour = colors.lime
+		elseif tmppromptColour == "pink" then promptColour = colors.pink
+		elseif tmppromptColour == "gray" then promptColour = colors.gray
+		elseif tmppromptColour == "lightGray" then promptColour = colors.lightGray
+		elseif tmppromptColour == "cyan" then promptColour = colors.cyan
+		elseif tmppromptColour== "purple" then promptColour = colors.purple
+		elseif tmppromptColour == "blue" then promptColour = colors.blue
+		elseif tmppromptColour == "brown" then promptColour = colors.brown
+		elseif tmppromptColour == "green" then promptColour = colors.green
+		elseif tmppromptColour == "red" then promptColour = colors.red
+		elseif tmppromptColour == "black" then promptColour = colors.black
+		else promptColour = colors.red end
+		tempfile.close()
+		returntable[1] = textColour
+		returntable[2] = bgColour
+		returntable[3] = promptColour
+		returntable[4] = tmptextColour
+		returntable[5] = tmpbgColour
+		returntable[6] = tmppromptColour
+	elseif term.isColor() then
+		returntable[1] = colors.green
+		returntable[2] = colors.black
+		returntable[3] = colors.red
+		returntable[4] = "green"
+		returntable[5] = "black"
+		returntable[6] = "red"
+	else
+		returntable[1] = colors.white
+		returntable[2] = colors.black
+		returntable[3] = colors.gray
+		returntable[4] = "white"
+		returntable[5] = "black"
+		returntable[6] = "gray"
+	end
+	return returntable
+end
+--minux halt and restart
+function halt()
+	tempfile = fs.open("/temp/minux/boot/fail4.tmp" ,"w")
+	tempfile.write("0")
+	tempfile.close()
+	os.shutdown()
+end
+function restart()
+	tempfile = fs.open("/temp/minux/boot/fail4.tmp" ,"w")
+	tempfile.write("0")
+	tempfile.close()
+	os.reboot()
+end
+-- minux logging
+function debug(printstring, programname)
+	expect(1, printstring, "string")
+	expect(2, programname, "string","nil")
+	if programname == nil then programname = "minux" end
+	if _G.debugmode == "enabled" or _G.debugmode == "full" then
+		print(printstring)
+	elseif _G.debugmode == "logging" or _G.debugmode == "full" then
+		logfile = fs.open("/var/log/"..programname..".txt" , "a")
+		logfile.writeLine(printstring)
+		logfile.close()
+	end
+	return true
+end
+--file/string api's
+function countline(filename)
+	expect(1, filename, "string")
+	if fs.exists(filename) then
+		local tempfile = fs.open(filename , "r")
+		local linecount = 1
+		local line = "start"
+		while line ~= nil do
+			line = tempfile.readLine()
+			if line ~= nil then linecount = linecount + 1 end
+		end
+		tempfile.close()
+		return linecount
+	else
+		return false
+	end
+end
+function findline(filename,target)
+	expect(1, filename, "string")
+	expect(2, target, "string")
+	if fs.exists(filename) then
+		local linenumber = 1
+		local tempfile = fs.open(filename , "r")
+		local line = "start"
+		while line ~= nil do 
+			if string.find(line, target) ~= nil then tempfile.close() linenumber = linenumber - 1 return linenumber end
+			line = tempfile.readLine()
+			linenumber = linenumber + 1
+		end
+	end
+	return false
+end
+function findfile(filename)
+	expect(1, filename, "string")
+	minux.lsr("/")
+	local linenumber = 1
+	local tempfile = fs.open("/temp/ls/files.ls","r")
+	local line = "start"
+	local hitsfound = 0
+	local returntable = { }
+	returntable[1] = "noresult"
+	while line ~= nil do
+		line = tempfile.readLine()
+		if line ~= nil then
+			if string.find(line,filename) ~= nil then
+				hitsfound = hitsfound + 1
+				returntable[hitsfound] = linenumber
+			end
+		end
+		linenumber = linenumber + 1
+	end
+	tempfile.close()
+	return returntable
+end
+function printline(filename, linenumber)
+	expect(1, filename, "string")
+	expect(2, linenumber, "number")
+	if fs.exists(filename) == nil then return false end
+	local tempfile = fs.open(filename , "r")
+	local linecounter = 0
+	local line = "start"
+	local stopnumber = tonumber(linenumber)
+	while linecounter ~= stopnumber and line ~= nil do
+		line = tempfile.readLine()
+		linecounter = linecounter + 1 
+	end
+	tempfile.close()
+	return line
+end
+function removeline(filename, linenumber)
+	expect(1, filename, "string")
+	expect(2, linenumber, "number")
+	if fs.exists(filename) == false then return false end
+	local tempfile = fs.open(filename, "r")
+	local newfile = fs.open("/temp/dev/removeline.tmp","w")
+	local line = "start"
+	local counter = 0
+	while line ~= nil do
+		counter = counter + 1
+		line = tempfile.readLine()
+		if line ~= nil and counter ~= linenumber then newfile.writeLine(line) end
+	end
+	tempfile.close()
+	newfile.close()
+	fs.delete(filename)
+	fs.move("/temp/dev/removeline.tmp",filename)
+	return true
+end
+function removestring(filename, string)
+	expect(1, filename, "string")
+	expect(2, string, "string")
+	if fs.exists(filename) == false then return false end
+	local tempfile = fs.open(filename, "r")
+	local newfile = fs.open("/temp/dev/removeline.tmp","w")
+	local line = "start"
+	while line ~= nil do
+		line = tempfile.readLine()
+		if line ~= nil and line ~= string then newfile.writeLine(line) end
+	end
+	tempfile.close()
+	newfile.close()
+	fs.delete(filename)
+	fs.move("/temp/dev/removeline.tmp",filename)
+	return true
+end
+function replaceline(filename,input, output)
+	expect(1, filename, "string")
+	expect(2, input, "string")
+	expect(3, output, "string")
+	if fs.exists(filename) == false then return false end
+	local tempfile = fs.open(filename,"r")
+	local newfile = fs.open("/temp/dev/removeline.tmp","w")
+	local line = "start"
+	while line ~= nil do
+		line = tempfile.readLine()
+		if line ~= nil and line ~= input then newfile.writeLine(line) end
+		if line == input then newfile.writeLine(output) returnmsg = true end
+	end
+	tempfile.close()
+	newfile.close()
+	fs.delete(filename)
+	fs.move("/temp/dev/removeline.tmp",filename)
+	if returnmsg == true then return true
+	else return false 
+	end
+end
+
+function insertline(filename, input)
+	expect(1, filename, "string")
+	expect(2, input, "string")
+	if fs.exists(filename) then
+		local temp = fs.open(filename,"a")
+		temp.writeLine(input)
+		temp.close()
+		return true
+	else
+		return false
+	end
+end
+
+function writetable(filename, data)
+	expect(1,filename, "string")
+	expect(2,data, "table")
+	if fs.isDir(filename) == true then
+		return false
+	end
+	local tempfile = fs.open(filename, "w")
+	local tempcount = 1
+	while data[tempcount] ~= nil do
+		tempfile.writeLine(data[tempcount])
+		tempcount = tempcount + 1
+	end
+	tempfile.close()
+	return true
+end
+
+function readtable(filename)
+	expect(1,filename, "string")
+	if fs.exists(filename) == false then
+		return false
+	elseif fs.isDir(filename) == true then
+		return false
+	end
+	local tempfile = fs.open(filename, "r")
+	local tempcount = 1
+	local data = {}
+	data[1] = tempfile.readLine()
+	while data[tempcount] ~= nil do
+		tempcount = tempcount + 1
+		data[tempcount] = tempfile.readLine()
+	end
+	tempfile.close()
+	return data
+end
+
+-- http get api
+function download(adress, filepath)
+	expect(1,adress, "string")
+	expect(2,filepath, "string")
+	local requestcount = 0
+	local requestretry = false
+	-- test the url
+	if http.checkURL(adress) == true then
+		requestretry = true
+	else
+		print("server unreachable")
+		return false
+	end
+	-- try to download the file
+	while requestcount ~= 3 and requestretry == true do
+		minux.debug("minux:http-request:"..adress,"minux")
+		getrequest = http.get(adress)
+		request = getrequest.readAll()
+		getrequest.close()
+		if request ~= nil then
+			requestretry = false
+			tempfile = fs.open(filepath , "w")
+			tempfile.write(request)
+			tempfile.close()
+			minux.debug("getpack:file retrieved","apt","minux")
+		else
+			requestcount = requestcount + 1
+			minux.debug("http-get:failed attempt "..requestcount.."/3","minux")
+			os.sleep(3)
+		end
+	end
+	if requestcount == 3 and requestretry == true then
+		minux.debug("http-get:attempt failed","minux")
+		return false
+	else
+		minux.debug("http-get:file retrieved","minux")
+		return true
+	end
+end
+-- end minux api's

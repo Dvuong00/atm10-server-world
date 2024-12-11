@@ -1,0 +1,836 @@
+gcDir = settings.get("relativeDir")
+
+os.loadAPI(gcDir.."/apis/cprint")
+os.loadAPI(gcDir.."/apis/settingfile")
+os.loadAPI(gcDir.."/apis/escalias")
+--Goldcube API, MIT license (c) Missooni 2024
+
+surface = dofile(gcDir.."/apis/surface")
+terminal = term.current()
+logger = window.create(terminal, 4, 1, 18, 20, false)
+stats = window.create(terminal, 27, 1, 20, 20, false)
+textscreen = peripheral.wrap("left")
+imgscreen = peripheral.wrap("top")
+diskdrive = peripheral.wrap("right")
+speaker = peripheral.wrap("bottom")
+disklabel = disk.getLabel("right")
+if disklabel == nil then disklabel = "Unlabeled Disk" end
+palettecfg = settingfile.openSettingsFile(gcDir.."/apis/cfg/palettecfg")
+
+function clearMonitors()
+    if (textscreen ~= nil and imgscreen ~= nil) then
+        term.redirect(textscreen)
+        cprint.clear()
+        term.setCursorBlink(false)
+        textscreen.setTextScale(1)
+        term.redirect(imgscreen)
+		cprint.clear()
+        term.setCursorBlink(false)
+        imgscreen.setTextScale(0.5)
+    end
+    term.redirect(stats)
+    term.redirect(logger)
+	    cprint.clear()
+    term.redirect(terminal)
+    term.setCursorBlink(false)
+end
+
+function drawConsoleMenu()
+cprint.clear()
+cprint.cprint("&1             _   _         _       ")
+cprint.cprint("     ___ ___| |_| |___ _ _| |_ ___ ")
+cprint.cprint("    | . | . | | . |  _| | | . | -_|")
+cprint.cprint("    |_  |___|_|___|___|___|___|___| v1.4.2")
+cprint.cprint("    |___|                          ")
+cprint.cprint("\n&4   Welcome to your Goldcube system!")
+if (fs.exists("disk/gcgame/game.lua")) == true then
+    cprint.cprint("&4      Game disk inserted: &0"..disklabel)
+else
+    cprint.cprint("&e      No game disk has been found.")
+end
+cprint.cprint("\n&8        System Status:")
+if (peripheral.getType("top") == "monitor" and peripheral.getType("left") == "monitor" and peripheral.getType("right") == "drive" and peripheral.getType("bottom") == "speaker") then
+cprint.cprint("&5      All peripherals succesfully located")
+else
+cprint.cprint("&e      Peripherals are missing or misplaced.")
+end
+if (fs.exists(gcDir.."/apis/surface") == true and fs.exists(gcDir.."/apis/settingfile") == true and fs.exists(gcDir.."/apis/escalias") and fs.exists(gcDir.."/apis/cprint") == true and fs.exists(gcDir.."/apis/palette") == true) then
+cprint.cprint("&5      All dependencies successfully initialized")
+else
+cprint.cprint("&e      API files are missing from this system.")
+end
+cprint.cprint("&1      Currently selected palette: "..palettecfg.getValue(settings.get("palette").."label"))
+cprint.cprint("      $0 $1 &2$2 &3$3 &4$4 &5$5 &6$6 &7$7 &8$8 &9$9 &a$a &b$b &c$c &d$d &e$e &f$f")
+cprint.cprint("&"..settings.get('butTxtCol1').."\n      $"..settings.get('butCol1').." Swap Palette $f $"..settings.get('butCol2').."&"..settings.get('butTxtCol2').." Play Game Disk $f")
+cprint.cwrite("&0\n      &8Œ$7 $f‘$f $7&0 More system information  $f")
+local w, h = term.getSize()
+term.setCursorPos(1,h)
+end
+
+function viewSystemInfo(infopageCurrent, shellObj)
+	local infoscreen = surface.load(gcDir.."/docs/gcinfo"..infopageCurrent..".nft")
+	infoscreen:output()
+    repeat
+        event, button, x, y = os.pullEvent()
+    until event == "mouse_click" or event == "mouse_scroll"
+	if event == "mouse_click" and button == 1 or button == 2 then 
+	if speaker ~= nil then
+	speaker.playNote("hat",1,4)
+	delay(0.2)
+	speaker.playNote("hat",1,2) end
+	drawConsoleMenu()
+	mainMenuButtons(shellObj)
+	elseif event == "mouse_scroll" and button == 1 then
+	if infopageCurrent < 30 then infopageCurrent = infopageCurrent + 1 
+	speaker.playSound("item.book.page_turn",1,1.5) end
+	viewSystemInfo(infopageCurrent, shellObj)
+	elseif event == "mouse_scroll" and button == -1 then
+	if infopageCurrent > 1 then infopageCurrent = infopageCurrent - 1
+	speaker.playSound("item.book.page_turn",1,1.5) end
+	viewSystemInfo(infopageCurrent, shellObj)
+	end
+end
+
+function viewSystemPlugins(selectedPlugin, lowerLimit, shellObj)
+	local pluginscreen = surface.load(gcDir.."/docs/gcplugins.nft")
+	if selectedPlugin > 0 then 
+	pluginscreen:drawString("                        \n                        ", 2, pluginY-1, colors.yellow, colors.yellow)
+	end
+	local plugtable = fs.list(gcDir.."/plugins/")
+	local labelBG, drawBG, labelTxt = colors.gray, colors.gray, colors.white
+	local upperLimit = lowerLimit + 4
+	local listNum = 1
+    for i=lowerLimit, upperLimit do
+	if plugtable[i] == nil then break end
+	if labelBG == colors.gray then labelBG = colors.lightGray else labelBG = colors.gray end
+	if selectedPlugin == i then 
+	drawBG = colors.yellow
+	labelTxt = colors.black
+	else
+	drawBG = labelBG
+	labelTxt = colors.white
+	end
+	listNum = listNum + 1
+	pluginscreen:drawString(i..".\n\\"..plugtable[i].."\\\n\n", 2, 2*listNum, drawBG, labelTxt)
+	end
+	if ((plugtable[selectedPlugin] ~= nil) and (fs.exists(gcDir.."/plugins/"..plugtable[selectedPlugin].."/info.txt"))) then
+		local plugfile = fs.open(gcDir.."/plugins/"..plugtable[selectedPlugin].."/info.txt", "r")
+		local lineNum = 1
+		while true do
+			local line = plugfile.readLine()
+			if not line then break end
+			pluginscreen:drawString(line.."\n", 30, lineNum+1, colors.black, colors.white)
+			lineNum = lineNum + 1
+		end
+		plugfile.close()
+	end
+	pluginscreen:output()
+    repeat
+    event, button, x, y = os.pullEvent()
+    until event == "mouse_click" or event == "mouse_scroll"
+	if event == "mouse_scroll" and button == 1 then
+	if plugtable[lowerLimit+5] ~= nil
+	then lowerLimit = lowerLimit + 5 
+	selectedPlugin = 0	
+	speaker.playSound("item.book.page_turn",1,1.5) end
+	viewSystemPlugins(selectedPlugin, lowerLimit, shellObj)
+	elseif event == "mouse_scroll" and button == -1 then 
+	if lowerLimit ~= 1 then lowerLimit = lowerLimit - 5 
+	selectedPlugin = 0	
+	speaker.playSound("item.book.page_turn",1,1.5) end
+	viewSystemPlugins(selectedPlugin, lowerLimit, shellObj) 
+	else
+	if ((x >= 3) and (x <= 26)) then
+		local tabDir = "/rom/programs/shell.lua"
+		if ((selectedPlugin > 0) and (plugtable[selectedPlugin] ~= nil) and fs.exists(gcDir.."/plugins/"..plugtable[selectedPlugin].."/init.lua")) then tabDir = gcDir.."/plugins/"..plugtable[selectedPlugin].."/init.lua" end
+		if (y == 2) then
+			term.setCursorPos(3,2)
+			cprint.cwrite("$7&8 Return to Console Menu $f")
+			if speaker ~= nil then
+			speaker.playNote("basedrum", 1, 7)
+			speaker.playNote("snare", 1, 16)
+			speaker.playNote("didgeridoo", 1, 7)
+			delay(0.275)
+			speaker.playNote("snare", 1, 5)
+			speaker.playNote("basedrum", 1, 0)
+			speaker.playNote("hat", 1, 3)
+			speaker.playNote("didgeridoo", 1, 5)
+			end
+			term.setCursorPos(3,2)
+			cprint.cwrite("$1&f Return to Console Menu $f")
+			delay(0.2)
+			drawConsoleMenu()
+			mainMenuButtons(shellObj)
+		elseif ((y == 16) and (x >= 15) and (x <= 23)) then
+			term.setCursorPos(15,16)
+			cprint.cwrite("$7&8 New Tab $f")
+			if speaker ~= nil then
+			speaker.playNote("cow_bell", 1, 17)
+			delay(0.15)
+			speaker.playNote("cow_bell", 1, 12)
+			end
+			term.setCursorPos(15,16)
+			cprint.cwrite("$7&0 New Tab $f")
+			delay(0.2)
+			shellObj.switchTab(shellObj.openTab(tabDir))
+			viewSystemPlugins(selectedPlugin, lowerLimit, shellObj)
+		elseif ((y == 16) and (x >= 6) and (x <= 13) and (plugtable[selectedPlugin] ~= nil) and fs.exists(gcDir.."/plugins/"..plugtable[selectedPlugin].."/init.lua")) then
+			term.setCursorPos(6,16)
+			cprint.cwrite("$7&8 Launch $f")
+			delay(0.2)
+			term.setCursorPos(6,16)
+			cprint.cwrite("$7&0 Launch $f")
+			if speaker ~= nil then
+			speaker.playNote("iron_xylophone", 1, 5)
+			speaker.playNote("bass", 1, 0)
+			delay(0.2)
+			speaker.playNote("iron_xylophone", 1, 7)
+			speaker.playNote("bass", 1, 5)
+			delay(0.175)
+			speaker.playNote("iron_xylophone", 1, 12)
+			speaker.playNote("bass", 1, 12)
+			end
+			term.clear()
+			term.setCursorPos(1,1)
+			shellObj.run(tabDir)
+			viewSystemPlugins(selectedPlugin, lowerLimit, shellObj)
+		elseif ((y == 16) and (x >= 6) and (x <= 13)) then
+			if speaker ~= nil then
+			speaker.playNote("iron_xylophone", 1, 7)
+			speaker.playNote("iron_xylophone", 1, 5)
+			speaker.playNote("bass", 1, 1)
+			speaker.playNote("didgeridoo", 1, 12)
+			speaker.playNote("didgeridoo", 1, 5)
+			end
+			viewSystemPlugins(selectedPlugin, lowerLimit, shellObj)
+		else
+			if ((button == 1) and (speaker ~= nil) and (pluginY ~= y) and (pluginY ~= y-1) and (y >= 5) and (y <= 14)) then speaker.playSound("ui.button.click",.3,1) end
+			if button == 2 then selectedPlugin = 0
+			elseif ((y == 5) or (y == 6)) then 
+			pluginY = 5
+			selectedPlugin = lowerLimit
+			elseif ((y == 7) or (y == 8)) then 
+			pluginY = 7
+			selectedPlugin = lowerLimit+1
+			elseif ((y == 9) or (y == 10)) then 
+			pluginY = 9
+			selectedPlugin = lowerLimit+2
+			elseif ((y == 11) or (y == 12)) then 
+			pluginY = 11
+			selectedPlugin = lowerLimit+3
+			elseif ((y == 13) or (y == 14)) then 
+			pluginY = 13
+			selectedPlugin = lowerLimit+4
+			end
+		viewSystemPlugins(selectedPlugin, lowerLimit, shellObj)
+		end
+	else
+	viewSystemPlugins(selectedPlugin, lowerLimit, shellObj)
+	end
+	end
+end
+
+
+function mainMenuButtons(shellObj)
+    repeat
+        event, button, x, y = os.pullEvent()
+    until event == "mouse_click" or event == "key"
+    if event == "key" then
+	shellObj.exit()
+    shellObj.run("rom/programs/shell.lua")
+    elseif ((x >= 7) and (x <= 20) and (y == 16)) then
+    local num = tonumber(string.sub(settings.get("palette"),-1))
+	term.setCursorPos(7 , 16)
+	cprint.cwrite("$7&8 Swap Palette $f")
+	if speaker ~= nil then
+	speaker.playNote("bit",1,1)
+	delay(0.27)
+	speaker.playNote("bit",1,4)
+	delay(0.15)
+	speaker.playNote("bit",1,13)
+	speaker.playNote("bit",1,21) end
+    if fs.exists(gcDir.."/apis/cfg/".."gcp"..(num+1)) and palettecfg.getValue("gcp"..(num+1).."label") ~= nil then
+    settings.set("palette", ("gcp"..(num+1)))
+    else
+    settings.set("palette", ("gcp1"))
+    end
+    settings.save(gcDir.."/apis/cfg/gcsystem")
+	term.setCursorPos(7 , 16)
+	cprint.cwrite("$e&0 Swap Palette $f$0")
+	if peripheral.getType("top") == "monitor" and peripheral.getType("left") == "monitor" then
+	colorMonitors(shellObj, gcDir.."/apis/cfg/"..settings.get("palette"))
+	drawConsoleMenu()
+	mainMenuButtons(shellObj)
+	end
+    elseif ((x >= 22) and (x <= 37) and (y == 16)) then
+    if fs.exists("disk/gcgame/game.lua") == true then
+	term.setCursorPos(22 , 16)
+	cprint.cwrite("$7&8 Play Game Disk $f")
+	local total = 0
+	for i = 1,#disklabel do
+		total = total + string.byte(disklabel:sub(i,i))
+	end
+	if total < 100 then total = total + 100 end
+	if total > 999 then total = string.sub(total, -3) end
+	local note1 = string.sub(total,1,1)
+	local note2 = string.sub(total,2,2)
+	local note3 = string.sub(total,-1)
+	if speaker ~= nil then
+	speaker.playNote("bit",1,note1+10)
+	delay(0.2)
+	speaker.playNote("bit",1,note2+10)
+	delay(0.2)
+	speaker.playNote("bit",1,note3+10)
+	end
+	term.setCursorPos(22 , 16)
+	cprint.cwrite("$b&0 Play Game Disk $f")
+	delay(0.2)
+    shellObj.run("disk/gcgame/game.lua")
+	colorMonitors(shellObj, gcDir.."/apis/cfg/"..settings.get("palette"))
+    elseif disk.isPresent("right") then
+	term.setCursorPos(22 , 16)
+	cprint.cwrite("$7&8  Writing Disk  $f")
+	if speaker~= nil then
+	speaker.playNote("bit", 1, 12)
+	delay(0.175)
+	speaker.playNote("bit", 1, 15)
+	delay(0.175)
+	speaker.playNote("bit", 1, 20)
+	delay(0.175)
+	speaker.playNote("bit", 1, 12)
+	delay(0.175)
+	speaker.playNote("bit", 1, 15)
+	delay(0.175)
+	speaker.playNote("bit", 1, 20)
+	end
+	delay(0.5)
+    shellObj.run("mkdir disk/gcgame")
+    shellObj.run("copy /"..gcDir.."/template/* disk/gcgame/")
+	else
+	if speaker ~= nil then
+	term.setCursorPos(22 , 16)
+	cprint.cwrite("$7&8  No Disk Found $f")
+	speaker.playNote("bit", 1, 4)
+	speaker.playNote("bit", 1, 1)
+	delay(0.25)
+	speaker.playNote("bit", 1, 1)
+	speaker.playNote("bit", 1, 4)
+	delay(0.25)
+	end
+    end
+    clearMonitors()
+	drawConsoleMenu()
+    mainMenuButtons(shellObj)
+    elseif ((x >= 11) and (x <= 37) and (y == 18)) then
+	term.setCursorPos(11, 18)
+	cprint.cwrite("$7&8 More system information  $f")
+	if speaker ~= nil then
+	speaker.playNote("hat",1,2)
+	delay(0.2)
+	speaker.playNote("hat",1,4) end
+	term.setCursorPos(11, 18)
+	cprint.cwrite("$7&0 More system information  $f")
+	delay(0.2)
+	viewSystemInfo(1, shellObj)
+    elseif ((x >= 7) and (x <= 9) and (y == 18)) then
+	term.setCursorPos(9, 18)
+	cprint.cwrite("$f‘")
+	if speaker ~= nil then
+	speaker.playNote("basedrum", 1, 1)
+	delay(0.175)
+	speaker.playNote("basedrum", 1, 2)
+	delay(0.2)
+	speaker.playNote("basedrum", 1, 0)
+	speaker.playNote("snare", 1, 3)
+	speaker.playNote("hat", 1, 16)
+	speaker.playNote("didgeridoo", 1, 5)
+	end
+	viewSystemPlugins(0, 1, shellObj)
+    else
+    mainMenuButtons(shellObj)
+    end
+end
+
+function gameMenuButtons(gameDir)
+    repeat
+        event, button, x, y = os.pullEvent()
+    until event == "mouse_click"
+    if button == 1 and ((x >= 13) and (x <= 24) and (y == 15)) and fs.exists(gameDir.."/gamefile") then
+	term.setCursorPos(14,15)
+	cprint.cwrite("$7&8  \17 Load    $f&0")
+	delay(0.2)
+	if fs.exists(ogfile) then
+	fs.delete(ogfile.."Display")
+	fs.copy(ogfile, ogfile.."Display")
+	end
+    elseif button == 2 and ((x >= 26) and (x <= 37) and (y == 15)) then
+	term.setCursorPos(27,15)
+	cprint.cwrite("$7&8    New \16   $f&0")
+	delay(0.2)
+    fs.delete(ogfile)
+	fs.delete(ogfile.."Display")
+    fs.copy(ogfile.."Default", ogfile)
+	fs.copy(ogfile.."Default", ogfile.."Display")
+    else
+    gameMenuButtons(gameDir)
+    end
+end
+
+function dPadButtons(anchor1,anchor2,anchor3,anchor4)
+    repeat
+    event, side, x, y = os.pullEvent("monitor_touch")
+    until side == "left"
+	if y == 1 and x >= 6 and x <= 13 then
+		if anchor1 ~= "" then
+			anchored = true
+			anchorkey = anchor1
+		end
+	elseif y == 3 and x >= 1 and x <= 7 then
+		if anchor3 ~= "" then
+			anchored = true
+			anchorkey = anchor3
+		end	
+	elseif y == 3 and x >= 12 and x <= 18 then
+		if anchor4 ~= "" then
+			anchored = true
+			anchorkey = anchor4
+		end	
+	elseif y == 5 and x >= 6 and x <= 13 then
+		if anchor2 ~= "" then
+			anchored = true
+			anchorkey = anchor2
+		end
+	end
+	if anchored ~= true then
+		dPadButtons(anchor1,anchor2,anchor3,anchor4)
+	end
+end
+
+function regionTouch(anchorTable) 
+	local anchor1, anchor2, anchor3, anchor4, anchor5, anchor6, anchor7, anchor8, anchor9 = anchorTable[1], anchorTable[2], anchorTable[3], anchorTable[4], anchorTable[5], anchorTable[6], anchorTable[7], anchorTable[8], anchorTable[9]
+    repeat
+    event, side, x, y = os.pullEvent("monitor_touch")
+    until side == "top"
+	if  x >= 1 and x <= 19 and y >= 1 and y <= 8 then
+		if anchor4 ~= "" then
+			anchored = true
+			anchorkey = anchor4
+		end
+	elseif x >= 20 and x <= 38 and y >= 1 and y <= 8 then
+		if anchor1 ~= "" then
+			anchored = true
+			anchorkey = anchor1
+		end
+	elseif x >= 39 and x <= 57 and y >= 1 and y <= 8 then
+		if anchor7 ~= "" then
+			anchored = true
+			anchorkey = anchor7
+		end
+	elseif x >= 1 and x <= 19 and y >= 9 and y <= 16 then
+		if anchor5 ~= "" then
+			anchored = true
+			anchorkey = anchor5
+		end
+	elseif x >= 20 and x <= 38 and y >= 9 and y <= 16 then
+		if anchor2 ~= "" then
+			anchored = true
+			anchorkey = anchor2
+		end
+	elseif x >= 39 and x <= 57 and y >= 9 and y <= 16 then
+		if anchor8 ~= "" then
+			anchored = true
+			anchorkey = anchor8
+		end
+	elseif x >= 1 and x <= 19 and y >= 17 and y <= 24 then
+		if anchor6 ~= "" then
+			anchored = true
+			anchorkey = anchor6
+		end
+	elseif x >= 20 and x <= 38 and y >= 17 and y <= 24 then
+		if anchor3 ~= "" then
+			anchored = true
+			anchorkey = anchor3
+		end
+	elseif x >= 39 and x <= 57 and y >= 17 and y <= 24 then
+		if anchor9 ~= "" then
+			anchored = true
+			anchorkey = anchor9
+		end
+	end
+	if anchored ~= true then
+		regionTouch(anchorTable)
+	end
+end
+
+function initiate(shellObj, gameDir)
+    ogfile = gameDir.."/gamefile"
+    term.redirect(imgscreen)
+    term.clear()
+    term.redirect(terminal)
+    drawGameMenu(gameDir)
+    gcgamefile = settingfile.openSettingsFile(ogfile)
+	displayfile = settingfile.openSettingsFile(ogfile.."Display")
+    term.clear()
+    logger.setVisible(true)
+    stats.setVisible(true) 
+    surfbg = colors.black
+    surf = surface.create(57, 24, surfbg)
+    surfimg = surface.load(" ")
+    surfbgimg = surface.load(" ")
+    drawGameFile()
+    loadGameStage(shellObj, gcgamefile.getValue("savestate"), gameDir)
+end
+
+function colorMonitors(shellObj, pal)
+    shellObj.run(gcDir.."/apis/palette", pal)
+    term.redirect(imgscreen)
+    shellObj.run(gcDir.."/apis/palette", pal)
+    term.redirect(textscreen)
+    shellObj.run(gcDir.."/apis/palette", pal)
+    term.redirect(stats)
+    shellObj.run(gcDir.."/apis/palette", pal)
+    term.redirect(logger)
+    shellObj.run(gcDir.."/apis/palette", pal)
+    term.redirect(terminal)
+end
+
+function drawGameMenu(gameDir)
+    local menuBG = surface.load(gameDir.."/menu.nft")
+	local menuScreen = surface.create(51, 19)
+    if menuBG ~= nil then 
+	menuScreen:drawSurface(menuBG, 0, 0)
+    menuBG:output(imgscreen, 3, 2)
+	else
+	menuScreen:drawString(disklabel, 25-(#disklabel/2), 8, colors.black, colors.white)
+	end
+    if fs.exists(gameDir.."/gamefile") then menuScreen:drawLine(13, 14, 24, 14, cprint.cCode(settings.get("butCol1"))) end
+    menuScreen:drawLine(26, 14, 37, 14, cprint.cCode(settings.get("butCol2")))
+    if fs.exists(gameDir.."/gamefile") then menuScreen:drawString("\17 Load", 15, 14, cprint.cCode(settings.get("butCol1")), cprint.cCode(settings.get("butTxtCol1"))) end
+    menuScreen:drawString("New \16", 30, 14, cprint.cCode(settings.get("butCol2")), cprint.cCode(settings.get("butTxtCol2")))
+    menuScreen:output()
+    gameMenuButtons(gameDir)
+end
+
+function drawGameFile(isDisplay)
+	stats.setVisible(false)
+    term.redirect(stats)
+    term.clear()
+    term.setCursorPos(1,1)
+	local drawFile = ""
+	if isDisplay == "display" then
+		drawFile = displayfile
+		else
+		drawFile = gcgamefile
+		end
+    for i=1, 19 do
+    local str = ("stat"..i)
+    local val = drawFile.getSectionedValue("Stats Page", str)
+        if drawFile.getSectionedValue("Stats Page", (str.."tag")) ~= nil then
+        val = drawFile.getSectionedValue("Stats Page", (str.."tag"))..val
+        end      
+        if type(val) == "number" and drawFile.getSectionedValue("Stats Page", (str.."max")) ~= nil then
+            maxval = drawFile.getSectionedValue("Stats Page", (str.."max"))
+            cprint.sb(cprint.cCode(settings.get("barCol1")))
+            print("                     ")
+            cprint.sb(cprint.cCode(settings.get("barCol2")))
+            moveMousePos(0,1)
+            print((" "):rep(math.floor(val / maxval * 21)))
+            cprint.sb(colors.black)
+        elseif type(val) == "number" or type(val) == "string" then
+            val = escalias.fix(tostring(val))
+            cprint.cprint(val)
+		else
+			cprint.cprint(" ")
+        end
+    end
+	stats.setVisible(true)
+    term.redirect(terminal)
+end
+            
+function moveMousePos(directionx, directiony)
+    xPos, yPos = term.getCursorPos()
+    cprint.sc(xPos-directionx,yPos-directiony)
+end
+
+function easyTouch(newline)
+    term.setCursorBlink(true)
+    os.pullEvent("monitor_touch")
+    if newline == true then
+    term.redirect(logger)
+    cprint.cprint(" ")
+    term.redirect(textscreen)
+    cprint.cprint(" ")
+    end
+    term.setCursorBlink(false)
+end
+
+function choiceTouch(label1, mod1, op1, val1, label2, mod2, op2, val2)
+	term.redirect(textscreen)
+	term.clear()
+	term.setCursorPos(1,3)
+    local new1 = ""
+    local new2 = ""
+    if tonumber(displayfile.getSectionedValue("Stats Page",mod1)) ~= nil then 
+    new1 = tonumber(displayfile.getSectionedValue("Stats Page",mod1))
+    else
+    new1 = displayfile.getSectionedValue("Stats Page", mod1)
+    end
+    if tonumber(displayfile.getSectionedValue("Stats Page",mod2)) ~= nil then 
+    new2 = tonumber(displayfile.getSectionedValue("Stats Page", mod2))
+    else    
+    new2 = displayfile.getSectionedValue("Stats Page", mod2)
+    end
+	if op1 == ":" then new1 = val1 else
+    new1 = escalias.parseOps(new1,op1,tonumber(val1)) end
+    if op2 == ":" then new2 = val2 else
+	new2 = escalias.parseOps(new2,op2,tonumber(val2)) end
+    cprint.cwrite(" &"..settings.get('butTxtCol1').."$"..settings.get('butCol1').."\17"..label1.."$f")
+	moveMousePos(-(18-(#label2+2)-(#label1+2)),0)
+	cprint.cprint("&"..settings.get('butTxtCol2').."$"..settings.get('butCol2')..label2.."\16$f")
+    repeat
+    event, side, x, y = os.pullEvent("monitor_touch")
+    until side == "left"
+    if x < 10 then
+        displayfile.setSectionedValue("Stats Page",mod1, new1) 
+    else
+        displayfile.setSectionedValue("Stats Page",mod2, new2)
+    end
+    displayfile.save(ogfile.."Display")
+    drawGameFile("display")
+    term.redirect(textscreen)
+    term.clear()
+	term.setCursorPos(1,1)
+end
+
+function choiceDPad(label1,anchor1,label2,anchor2,label3,anchor3,label4,anchor4)
+	term.redirect(textscreen)
+	cprint.cwrite("\n")
+	if label1 ~= "" and anchor1 ~= nil then
+	moveMousePos(-(math.ceil((16/2) - (#label1 / 2))), 0)
+	cprint.cwrite("&"..settings.get('D1TxtCol').."$"..settings.get('D1Col').."\30"..label1.."\30$f")
+	end
+	cprint.cprint("\n")	
+	if label3 ~= "" and anchor3 ~= nil then
+    cprint.cwrite("&"..settings.get('D3TxtCol').."$"..settings.get('D3Col').."\17"..label3.."$f")
+	moveMousePos(#label3+1,0)
+	end
+	if label4 ~= "" and anchor4 ~= nil then
+	moveMousePos(-11 - (6 - #label4), 0)
+	cprint.cwrite("&"..settings.get('D4TxtCol').."$"..settings.get('D4Col')..label4.."\16$f")
+	end
+	cprint.cwrite("\n\n")
+	if label2 ~= "" and anchor2 ~= nil then
+	moveMousePos(-(math.ceil((16/2) - (#label2 / 2))), 0)
+	cprint.cwrite("&"..settings.get('D2TxtCol').."$"..settings.get('D2Col').."\31"..label2.."\31$f")
+	end
+end
+
+-- Safe Sleep by Dmarcuse
+function delay(seconds)
+    local timer = os.startTimer(seconds)
+    local q = {}
+    while true do
+    local data = {os.pullEvent()}
+        if data[1] == "timer" and data[2] == timer then
+            break
+        else   
+            table.insert(q, data)
+        end
+    end
+    for i,v in ipairs(q) do
+    os.queueEvent(unpack(v))
+    end
+end
+
+function logPrint(txt)
+    term.redirect(textscreen)
+    cprint.cprint(txt)
+    term.redirect(logger)
+    cprint.cprint(txt)
+    term.redirect(textscreen)
+end
+
+-- Slow Print by Mads
+function slowLogPrint(txt, time)
+    term.redirect(textscreen)
+    local skip = 0
+    for i = 1, txt:len() do 
+            if txt:sub(i,i) ~= "&" and txt:sub(i,i) ~= "$" and skip == 0 then
+                cprint.cwrite(txt:sub(i, i))
+            elseif txt:sub(i,i) == "&" or txt:sub(i,i) == "$" and skip == 0 then
+                cprint.cwrite(txt:sub(i, i+1))
+                skip = 1
+            elseif skip == 1 then
+                skip = 0
+            end
+                sleep(time)
+    end
+   cprint.cprint("")
+   term.redirect(logger)
+   cprint.cprint(txt)
+   term.redirect(textscreen)
+end
+
+function parseStats(txt)
+if type(txt) == "string" then
+    for c in string.gmatch(txt, "_(.-)_") do
+        txt = string.gsub(txt,("_"..c.."_"),displayfile.getSectionedValue("Stats Page",c))
+    end
+end
+return txt
+end
+
+function loadGameStage(shellObj, stage, gameDir)
+	local stagefile = fs.open(gameDir.."/stages/"..stage, "r")
+	local skip = false
+	anchored = false
+	anchorkey = nil
+	while true do
+	local line = stagefile.readLine()
+	if not line then break end
+	if anchorkey == line and anchored == true then anchored = false end
+	if anchored == true then line = "" end
+	if skip == true then
+		line = ""
+		skip = false
+		end
+    local cmd1 = string.sub(tostring(line), 1, 1)
+    local cmd2 = string.sub(tostring(line), 2, 2)
+    local val0 = string.sub(tostring(line), 3)
+    local label1, label2 = string.match(tostring(line), "* (.-)|"), string.match(tostring(line), "|(.-)%[")
+    local substr1, substr2 = string.match(string.sub(tostring(line), 2), "%[(.-)%]"), string.match(tostring(line), "%]%[(.-)%]")
+    local mod1, op1, val1, mod2, op2, val2, val3, val4, label3, label4 = " ", " ", " ", " ", " ", " ", " ", " ", " ", " "
+	local anchorTable = {}
+	local labelTable = {}
+    if type(substr1) == "string" then
+        val0 = string.match(val0, "(.-)%[")
+        mod1 = string.match(substr1, "(.-)[-+=<>/,:?*]")
+        op1 = string.match(substr1, "[-+=<>/,:?*]")
+        val1 = string.match(substr1, "[-+=<>/,:?*](.+)")
+    end
+    if type(substr2) == "string" then
+        mod2 = string.match(substr2, "(.+)[-+=<>/,:?*]")
+        op2 = string.match(substr2, "[-+=<>/,:?*]")
+        val2 = string.match(substr2, "[-+=<>/,:?*](.+)")
+        end
+	if cmd1 ~= "+" then val0 = escalias.fix(parseStats(val0)) end
+    if cmd1 == "v" and cmd2 == ">" and type(tonumber(val0)) ~= "number" then easyTouch(false)
+    elseif cmd1 == "v" and cmd2 == ">" and type(tonumber(val0)) == "number" then
+    delay(tonumber(val0))
+    elseif cmd1 == "v" and cmd2 == " " and type(tonumber(val0)) == "number" then
+        delay(tonumber(val0))
+        term.redirect(logger)
+        cprint.cprint(" ")
+        term.redirect(textscreen)
+		cprint.cprint(" ")
+    elseif cmd1 == "v" then easyTouch(true)
+    elseif cmd1 == ">" and cmd2 == " " then slowLogPrint(val0, 0.05)
+    elseif cmd1 == ">" and cmd2 == "?" then slowLogPrint(val0, 0.1)
+    elseif cmd1 == ">" and cmd2 == "!" then logPrint(val0)
+	elseif cmd1 == "#" and fs.exists(gameDir.."/palettes/") then colorMonitors(shellObj, gameDir.."/palettes/"..val0)
+    elseif cmd1 == "[" and cmd2 == "$" then 
+        val0 = cprint.cCode(val0)   
+        surf:clear(val0)
+        if surfbgimg ~= nil then surf:drawSurface(surfbgimg, 0, 0) end
+        surf:output(imgscreen)
+        surfbg = val0
+    elseif cmd1 == "[" then
+        surf:clear(surfbg)
+        if #line <= 2 then
+            surfbgimg = nil
+        else
+            surfbgimg = surface.load(gameDir.."/images/"..val0)
+            surf:drawSurface(surfbgimg, 0, 0)
+        end
+            surf:output(imgscreen)
+    elseif cmd1 == "{" and cmd2 == ">" then
+		if mod2 == "nil" then mod2 = nil else mod2 = cprint.cCode(mod2) end
+        surf:drawString(val0, tonumber(mod1), tonumber(val1), mod2, cprint.cCode(val2))
+        surf:output(imgscreen)
+    elseif cmd1 == "{" and cmd2 == " " then
+		val1 = parseStats(val1)
+		mod1 = parseStats(mod1)
+        surfimg = surface.load(gameDir.."/images/"..val0)
+        surf:drawSurface(surfimg, tonumber(mod1), tonumber(val1))
+        surf:output(imgscreen)
+    elseif cmd1 == "+" and cmd2 == " " then
+        speaker.playSound(val0, tonumber(mod1), tonumber(val1))
+	elseif cmd1 == "*" then
+        choiceTouch(escalias.fix(parseStats(label1)), mod1, op1, parseStats(val1), escalias.fix(parseStats(label2)), mod2, op2, parseStats(val2))
+    elseif cmd1 == "?" then
+		val1 = parseStats(val1)
+		mod1 = parseStats(mod1)
+		if op1 == "<" or op1 == "=" or op1 == ">" then 
+	       	skip = true
+		   	if escalias.parseOps(displayfile.getSectionedValue("Stats Page",mod1), op1, val1) == true then
+			     	skip = false
+		   	end
+		elseif op1 == "," then
+			logger.setVisible(false)
+			stats.setVisible(false)
+			logPrint(escalias.fix(val1))
+			term.redirect(terminal)
+			term.clear()
+			term.setCursorPos(1,1)
+			cprint.cprint(escalias.fix(parseStats(val1)))
+			local input = read()
+			if input == nil or input == "" then input = " " end
+			displayfile.setSectionedValue("Stats Page",mod1,input)
+			term.clear()
+			term.redirect(textscreen)
+			logger.setVisible(true)
+			stats.setVisible(true)
+		elseif op1 == ":" then
+			displayfile.setSectionedValue("Stats Page",mod1,val1)
+		else
+			displayfile.setSectionedValue("Stats Page",mod1,escalias.parseOps(displayfile.getSectionedValue("Stats Page",mod1),op1,val1))
+		end
+		displayfile.save(ogfile.."Display")
+		drawGameFile("display")
+	elseif cmd1 == "-" and cmd2 == "*" then
+		labelTable = {}
+        anchorTable = {}
+        for capture in string.gmatch(line,"%[(.-)%]") do
+            if capture == "x" then
+                table.insert(labelTable, "")
+                table.insert(anchorTable, "")
+                else
+                   table.insert(anchorTable, "- "..string.match(capture,"|(.+)")) 
+                   table.insert(labelTable, string.match(capture,"(.-)|"))
+                end
+            end
+        val1, val2, val3, val4 = anchorTable[1], anchorTable[2], anchorTable[3], anchorTable[4]
+        label1, label2, label3, label4 = parseStats(labelTable[1]), parseStats(labelTable[2]), parseStats(labelTable[3]), parseStats(labelTable[4])
+        choiceDPad(label1, val1, label2, val2, label3, val3, label4, val4)
+		dPadButtons(val1, val2, val3, val4)
+		term.redirect(textscreen)
+		term.clear()
+		term.setCursorPos(1,1)
+	elseif cmd1 == "-" and cmd2 == "^" then
+		anchorTable = {}
+		for capture in string.gmatch(line,"%[(.-)%]") do
+            if capture == "x" then
+                table.insert(anchorTable, "")
+            else
+                table.insert(anchorTable, "- "..capture)
+				end
+            end
+			regionTouch(anchorTable)
+    elseif cmd1 == "-" then    
+       	if anchorkey == nil then
+        	anchorkey = parseStats(line)
+         	anchored = true
+   	    else
+			anchorkey = nil
+		    end
+	elseif cmd1 == "~" then
+		displayfile.setValue("savestate", val0)
+		displayfile.save(ogfile.."Display")
+		fs.delete(ogfile)		 		
+		fs.copy(ogfile.."Display", ogfile)
+		stagefile.close()
+		stagefile = fs.open(gameDir.."/stages/"..val0, "r")
+		end
+    end
+    stagefile.close()
+end

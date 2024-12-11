@@ -1,0 +1,7 @@
+AIF
+/bin/sword.sh
+/gbin/sword.exe
+/etc/apt/alias/sword.al
+/etc/apt/boot/sword.d
+/etc/man/sword.man
+/etc/apt/cleanup/sword.db

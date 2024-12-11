@@ -1,0 +1,621 @@
+-- apt api's
+function verifyconfig()
+	if fs.exists("/etc/apt/list/installed.db") == false then
+		print("no known packs installed, aborting install and resetting configuration.")
+		minux.debug("ERROR:104", "apt")
+		tempfile = fs.open("/etc/apt/list/installed.db","w")
+		tempfile.writeLine("minux-main")
+		tempfile.close()
+		return true
+	else
+		return false
+	end
+end
+
+function install(packname)
+	expect(1, packname, "string")
+	-- we check for user/admin rights and verify the install.db file, then we check if already installed
+	if isadmin == false and packname ~= "auth-client" and _G.owner ~= true then minux.debug("APT:Access denied") return false end
+	if verifyconfig() == true then	minux.debug("apt:install file was rebuilt!","apt") end
+	minux.debug("apt:checking:"..packname, "apt")
+	if apt.checkinstall(packname) == true then
+		minux.debug("apt:pack already installed", "apt")
+		return false
+	else
+		-- now we can run getpack, after we check and rebuild alias and bootaddon.
+		minux.debug("install:running getpack","apt")
+		local temp = apt.getpack(packname)
+		if temp == true then
+			if fs.exists("/etc/apt/list/"..packname..".db") == true then
+				minux.insertline("/etc/apt/list/installed.db",packname)
+				apt.aliasbuild()
+				apt.bootbuild()
+				minux.debug("install:updated installed.db")
+				return true
+			else
+				minux.debug("getpack:E:105:pack:"..packname, "apt")
+				return false
+			end
+		end
+	end
+end
+
+function getpack(packname)
+	expect(1, packname, "string")
+	if isadmin == false and packname ~= "auth-client" and _G.owner ~= true then minux.debug("APT:Access denied") return false end
+	-- we search the apt sourcelist and read them, otherwise revert to default.
+	aptsource = {}
+	aptsource[1] = "https://minux.vtchost.com/apt/"
+	if fs.exists("/usr/apt/source.ls") then
+		minux.debug("source file found", "apt")
+		local sourcefile = fs.open("/usr/apt/source.ls","r")
+		local count = 0
+		local runloop = true
+		local altserver = true
+		while runloop == true do
+			count = count + 1
+			aptsource[count] = sourcefile.readLine()
+			if aptsource[count] == nil then
+				runloop = false
+			else
+				minux.debug("apt-source:"..aptsource[count], "apt")
+			end
+		end
+		sourcefile.close()
+	else
+		minux.debug("Error:102:", "apt")
+		print("No apt sources known, resetting to default")
+	end
+	minux.debug("getpack:sources obtained", "apt")
+
+	-- we have our sources, we can now contact them and search for the pack
+	local runloop = true
+	local count = 0
+	local AIF = false
+	packsource = false
+	minux.debug("start search for pack", "apt")
+	while runloop == true do
+	-- we try to get the package list
+		count = count + 1
+		if aptsource[count] == nil then
+			runloop = false
+		else
+			minux.debug("trying "..aptsource[count].."manifest/"..packname..".db", "apt")
+			if fs.exists("/etc/apt/list/"..packname..".db") then fs.delete("/etc/apt/list/"..packname..".db") end
+			local dlfile = minux.download(aptsource[count].."manifest/"..packname..".db", "/etc/apt/list/"..packname..".db")
+			if dlfile == true then
+				local temp = fs.open("/etc/apt/list/"..packname..".db" ,"r")
+				local file = temp.readLine()
+				if file == "AIF" then
+					AIF = true
+					runloop = false
+					packsource = aptsource[count]
+					aptsource[count] = nil
+
+					minux.debug("getpack:Pack found:"..packname, "apt")
+					minux.debug("getpack:source:"..packsource , "apt")
+				else
+					minux.debug("getpack:pack not found","apt")
+					minux.debug("not on this server", "apt")
+				end
+				temp.close()
+			else
+				print("Server offline or pack not found")
+				minux.debug("packfile not found on server", "apt")
+			end
+		end
+	end
+	if AIF ~= true then
+		print("pack not found")
+		return false
+	end
+-- if it does exist we search for it's dependency's, we retrieve the dependency file
+	local depdone = false
+	minux.debug("searching for dependency file", "apt")
+	if fs.exists("/temp/apt/deplist.dep") then fs.delete("/temp/apt/deplist.dep") end
+	local tempdl = minux.download(packsource.."manifest/"..packname..".dep","/temp/apt/deplist.dep")
+	if tempdl == true then
+		local depfile = fs.open("/temp/apt/deplist.dep","r")
+		local depline = depfile.readLine()
+		if depline == "ADF" then
+			while depline ~= nil do
+				depline = depfile.readLine()
+				if depline ~= nil then
+					local depinstalled = false
+					local deptempfile = fs.open("/etc/apt/list/installed.db","r")
+					local deptempline = deptempfile.readLine()
+					while deptempline ~= nil do
+						if deptempline == depline then depinstalled = true end
+						deptempline = deptempfile.readLine()
+					end
+					deptempfile.close()
+					if depinstalled ~= true then apt.install(depline) end
+				else
+					depdone = true
+					minux.debug("getpack:dependencies satisfied","apt")
+				end
+			end
+		else
+			depdone = true
+			minux.debug("getpack:no dependencies found","apt")
+		end
+		depfile.close()
+	else
+		minux.debug("getpack:no dependenciess found","apt")
+		depdone = true
+	end
+
+-- we now search for the files and get them
+	if depdone ~= true then
+		minux.debug("getpack:E:103:depenency's not met", "apt")
+		print("depenencies unmet, aborting install")
+		return false
+	end
+	write("download:"..packname..":")
+	local temp = fs.open("/etc/apt/list/"..packname..".db" ,"r")
+	local cursorhor, cursorver = term.getCursorPos()
+	local countline = 1
+	local totalline = minux.countline("/etc/apt/list/"..packname..".db")
+	local file = temp.readLine()
+	while file ~= nil do
+		file = temp.readLine()
+		if file ~= nil then
+			minux.debug("downloading:"..packname..":"..file.."@"..packsource, "apt")
+			fs.delete(file)
+			succ = minux.download(packsource.."repository/"..packname.."/"..file, file)
+			if succ == true then
+				write(countline.."/"..totalline)
+				term.setCursorPos(cursorhor, cursorver)
+				countline = countline + 1
+			else
+				print("Error downloading file, aborting.")
+				return false
+			end
+		end
+	end
+	temp.close()
+	print("DONE!")
+	minux.debug("getpack:ending", "apt")
+	return true
+end
+
+-- removing a program
+function uninstall(packname)
+	expect(1, packname, "string")
+	minux.debug("removing pack:"..packname, "apt")
+
+	-- first we catch bad input
+	verifyconfig()
+	if isadmin == false and _G.owner ~= true then minux.debug("APT:Access denied") return false
+	elseif packname == "minux-main" then
+		print("cannot remove main package")
+		return false
+	elseif apt.checkinstall(packname) == false then
+		print("this package is not installed on this system")
+		minux.debug("ERROR:106", "apt")
+		return false
+	end
+
+	-- now we can uninstall the package files
+	minux.debug("running cleanup:"..packname, "apt")
+	apt.cleanup(packname)
+	minux.debug("deleting files", "apt")
+	local temp = fs.open("/etc/apt/list/"..packname..".db","r")
+	local file = "start"
+	file = temp.readLine()
+	while file ~= nil do
+		file = temp.readLine()
+		if file ~= nil then
+			fs.delete(file)
+		end
+	end
+	temp.close()
+
+	-- we now remove the package .db file and remove it from the installer list
+	minux.debug("clearing package manifest", "apt")
+	fs.delete("/etc/apt/list/"..packname..".db")
+	minux.debug("rebuilding installed.db", "apt")
+	minux.removestring("/etc/apt/list/installed.db",packname)
+	minux.debug("calling rebuildalias", "apt")
+	apt.aliasbuild()
+	minux.debug("calling rebuildbootaddon", "apt")
+	apt.bootbuild()
+	minux.debug("Finished", "apt")
+	return true
+end
+
+-- update function
+function update(packname)
+	expect(1, packname, "string", "nil")
+	verifyconfig()
+	minux.debug("reading source file", "apt")
+	--we see if the user has alternative apt repositories
+	tempaptsource = {}
+	tempaptsource[1] = "https://minux.vtchost.com/apt/"
+	if fs.exists("/usr/apt/source.ls") then
+		minux.debug("source file found","apt")
+		local sourcefile = fs.open("/usr/apt/source.ls","r")
+		local count = 1
+		local foundsource = sourcefile.readLine()
+		while foundsource ~= nil do
+			if foundsource ~= nil then
+				tempaptsource[count] = foundsource
+				minux.debug("found:"..tempaptsource[count], "apt")
+				count = count + 1
+			end
+			foundsource = sourcefile.readLine()
+		end
+		sourcefile.close()
+		minux.debug("end of source file", "apt")
+	else
+		print("No apt sources known, use 'apt -s default' to reset.")
+		minux.debug("no source file, using default", "apt")
+	end
+	-- we need to do read the installed list, read it and find those packages on the repositories.
+	-- step one, read the installed list. this needs to be looped untill all packs are done.
+	local serverurl = nil
+	minux.debug("reading installed.db", "apt")
+	local installedlist = fs.open("/etc/apt/list/installed.db" ,"r")
+	local nextpack = installedlist.readLine()
+	while nextpack ~= nil do
+	-- look trough the apt servers for this package manifest file.
+		sourcecount = 1
+		local foundserver = false
+		tempserver = tempaptsource[sourcecount]
+		while tempserver ~= nil do
+			minux.debug("trying:"..tempaptsource[sourcecount]..nextpack, "apt")
+			local requestcount = 0
+			local requestretry = false
+			if http.checkURL(tempaptsource[sourcecount]..nextpack.."manifest/APT.db") == true then
+				requestretry = true
+			else
+				print("server unreachable")
+				return false
+			end
+			while requestcount ~= 3 and requestretry == true do
+				getrequest = http.get(tempserver.."manifest/"..nextpack..".db")
+				request = getrequest.readAll()
+				getrequest.close()
+				requestcount = requestcount + 1
+				if request ~= nil then
+					requestretry = false
+					local tempfile = fs.open("/temp/apt/manifest/"..nextpack..".db", "w")
+					tempfile.write(request)
+					tempfile.close()
+					local tempfile = fs.open("/temp/apt/manifest/"..nextpack..".db", "r")
+					local servercheck = tempfile.readLine()
+					if servercheck == "AIF" then
+						minux.debug("CHECK:"..nextpack.."@"..tempserver, "apt")
+						minux.debug("AIF-FOUND", "apt")
+						serverurl = tempserver
+						tempserver = nil
+					else
+						minux.debug("AIF-FAIL", "apt")
+						sourcecount = sourcecount + 1
+						tempserver = tempaptsource[sourcecount]
+					end
+				end
+			end
+		end
+		if serverurl == nil then
+			print("No server found, aborting.")
+			minux.debug("ERROR:108", "apt")
+			return false
+		end
+
+	-- we clear out the version file download
+		minux.debug("prepairing version file", "apt")
+		if fs.exists("/etc/apt/list/version/"..nextpack..".ve") then
+			fs.delete("/etc/apt/list/version/"..nextpack..".v")
+			fs.move("/etc/apt/list/version/"..nextpack..".ve", "/etc/apt/list/version/"..nextpack..".v")
+		end
+
+	-- now we download the new version file
+		minux.debug("obtaining server version", "apt")
+		local temp = minux.download(serverurl.."manifest/version/"..nextpack..".ve","/etc/apt/list/version/"..nextpack..".ve")
+		if temp == false then
+			minux.debug("server is down or invalid")
+		end
+		local newversionfile = fs.open("/etc/apt/list/version/"..nextpack..".ve" ,"r")
+		local newversion = newversionfile.read()
+		newversionfile.close()
+		local oldversionfile = nil
+		if fs.exists("/etc/apt/list/version/"..nextpack..".v" , "r" ) then
+			minux.debug("comparing versions", "apt")
+			oldversionfile = fs.open("/etc/apt/list/version/"..nextpack..".v" ,"r")
+			oldversion = oldversionfile.read()
+			oldversionfile.close()
+		else
+			minux.debug("first update", "apt")
+			oldversion = "updateme"
+		end
+		if newversion == oldversion then
+			packuptodate = true
+			minux.debug("version number matches", "apt")
+		else
+			packuptodate = false
+			minux.debug("version number mismatch", "apt")
+		end
+
+	-- if version is old or update is forced, we getpack/update.
+		if packname == "-f" or packuptodate == false or nextpack == packname then
+			minux.debug("updating pack:", "apt")
+			apt.getpack(nextpack)
+		end
+
+	-- read nextpack to continue the process
+		nextpack = installedlist.readLine()
+	end
+
+	-- we rebuild the init/boot when done
+	minux.debug("running rebuildalias", "apt")
+	apt.aliasbuild()
+	minux.debug("running rebuildbootaddon", "apt")
+	apt.bootbuild()
+	return true
+end
+
+-- bootbuild
+function bootbuild()
+	minux.debug("searching boot files", "apt")
+	if fs.exists("/etc/apt/boot") == false then shell.run("mkdir /etc/apt/boot") end
+	local temp = fs.list("/etc/apt/boot/")
+	local count = 1
+	local keepalive = true
+	minux.debug("clearing old cache", "apt")
+	fs.delete("/temp/apt/addon.d")
+	local newbuild = fs.open("/temp/apt/addon.d" , "w")
+	while keepalive == true do
+		if temp[count] ~= nil then
+			local filename = temp[count]
+			minux.debug("reading:"..filename, "apt")
+			local bootfile = fs.open("/etc/apt/boot/"..filename,"r")
+			local newboot = bootfile.readAll()
+			newbuild.writeLine(newboot)
+			bootfile.close()
+			count = count + 1
+		else
+			keepalive = false
+		end
+	end
+	minux.debug("installing new file.", "apt")
+	newbuild.close()
+	if fs.exists("/boot/addon.d") then fs.delete("/boot/addon.d") end
+	fs.move("/temp/apt/addon.d","/boot/addon.d")
+	return true
+end
+
+function aliasbuild()
+	local temp = fs.list("/etc/apt/alias/")
+	os.loadAPI("/etc/api/minux")
+	os.loadAPI("/etc/api/apt")
+	local count = 1
+	local keepalive = true
+	minux.debug("clearing alias build cache", "apt")
+	fs.delete("/etc/apt/build/build.tmp")
+	local newbuild = fs.open("/etc/apt/build/build.tmp" , "a")
+	while keepalive == true do
+		if temp[count] ~= nil then
+			local filename = temp[count]
+			minux.debug("reading:"..filename, "apt")
+			local aliasfile = fs.open("/etc/apt/alias/"..filename,"r")
+			local newalias = aliasfile.readAll()
+			newbuild.writeLine(newalias)
+			aliasfile.close()
+			count = count + 1
+		else
+			keepalive = false
+		end
+	end
+	newbuild.close()
+	minux.debug("file built, installing", "apt")
+	fs.delete("/boot/alias.ls")
+	fs.move("/etc/apt/build/build.tmp","/boot/alias.ls")
+	minux.debug("done", "apt")
+	return true
+end
+
+function cleanup(packname)
+	expect(1, packname, "string")
+	minux.debug("cleanup:"..packname, "apt")
+	--checking for filename
+	local count = 1
+	if fs.exists("/etc/apt/cleanup/"..packname..".db") == false then keepalive = false minux.debug("no cleanup instructions found", "apt")
+	else keepalive = true end
+
+	-- running file
+	minux.debug("reading cleanup instructions", "apt")
+	if keepalive == true then tempfile = fs.open("/etc/apt/cleanup/"..packname..".db" , "r") readfile = true end
+	while keepalive == true do
+		local line = tempfile.readLine()
+		if line ~= nil then
+			filename = line
+			fs.delete(filename)
+			minux.debug("removing:"..filename, "apt")
+		else
+			keepalive = false
+		end
+	end
+	minux.debug("end cleanup", "apt")
+	if readfile == true then tempfile.close() readfile = nil end
+	return true
+end
+
+-- adding a repo source
+function addsource(source)
+	expect(1, source, "string")
+	-- are we admin?
+	minux.debug("checking for admin/owner rights", "apt")
+	if _G.isadmin == false and _G.owner ~= _G.login then
+		print("access denied")
+		minux.debug("ERROR:100", "apt")
+		return false
+	end
+
+	-- if source is default we reset to primary
+	if source == "default" or source == "stable" then
+		minux.debug("resetting to primary", "apt")
+		fs.delete("/usr/apt/source.ls")
+		local sourcefile = fs.open("/usr/apt/source.ls" , "w")
+		sourcefile.writeLine("https://minux.vtchost.com/apt/soft/")
+		sourcefile.writeLine("https://minux.vtchost.com/apt/1.2/")
+		sourcefile.close()
+		return true
+
+	-- if source is beta we set to beta
+	elseif source == "beta" then
+		minux.debug("resetting to beta", "apt")
+		fs.delete("/usr/apt/source.ls")
+		local sourcefile = fs.open("/usr/apt/source.ls" , "w")
+		sourcefile.writeLine("https://minux.vtchost.com/beta/")
+		sourcefile.close()
+		return true
+
+	-- if source is legacy, for compatibility reasons
+	elseif source == "legacy" then
+		minux.debug("resetting to legacy", "apt")
+		fs.delete("/usr/apt/source.ls")
+		local sourcefile = fs.open("/usr/apt/source.ls" , "w")
+		sourcefile.writeLine("https://minux.vtchost.com/apt/")
+		sourcefile.close()
+		return true
+
+-- source goldcube
+	elseif source == "goldcube" then
+		minux.debug("resetting to goldcube + primary", "apt")
+		fs.delete("/usr/apt/source.ls")
+		local sourcefile = fs.open("/usr/apt/source.ls" , "w")
+		sourcefile.writeLine("https://minux.vtchost.com/apt/soft/")
+		sourcefile.writeLine("https://minux.vtchost.com/apt/1.2/")
+		sourcefile.writeLine("https://goldcube.vtchost.com/stable/")
+		sourcefile.close()
+		return true
+
+	-- if source is nil we quit
+	elseif source == "" or source == nil then
+		minux.debug("apt:addsourceInvalid input","apt")
+		return false
+
+	-- if source is anything else, we try to obtain a manifest and check it
+	else
+		local sourcecheck = nil
+		if fs.exists("/temp/apt/source.ls") then
+			fs.delete("/temp/apt/source.ls")
+		end
+		minux.debug("touching APT repo:"..source, "apt")
+		local requestcount = 0
+		local requestretry = false
+		if http.checkURL(source.."manifest/APT.db") == true then
+			requestretry = true
+		else
+			print("server unreachable")
+			return false
+		end
+		while requestcount ~= 3 and requestretry == true do
+			getrequest = http.get(source.."manifest/APT.db")
+			local request = getrequest.readAll()
+			getrequest.close()
+			if request ~= nil then
+				requestretry = false
+				local tempfile = fs.open("/temp/apt/source.ls" , "w")
+				tempfile.write(request)
+				tempfile.close()
+				if fs.exists("/temp/apt/source.ls") then
+					local tempfile = fs.open("/temp/apt/source.ls","r")
+					local sourcecheck = tempfile.readLine()
+					tempfile.close()
+					if sourcecheck ~= "AIF" then
+						minux.debug("ERROR:107", "apt")
+						print("Verification fail: This is not a valid repository")
+						return false
+					else
+						minux.debug("Adding source", "apt")
+						print("Verification succeeded, apt source added")
+						minux.insertline("/usr/apt/source.ls", source)
+						return true
+					end
+				else
+					print("invalid source url")
+					minux.debug("ERROR:107", "apt")
+				end
+			end
+		end
+	end
+end
+
+-- clearing an apt source
+function clearsource(source)
+	expect(1, source, "string")
+	minux.debug("removing source:"..source, "apt")
+
+	-- are we admin?
+	if _G.isadmin == false and _G.owner == _G.login == false then
+		print("access denied")
+		minux.debug("ERROR:100 admin/owner = false")
+		return false
+	end
+	minux.debug("Admin/owner check = true" , "apt")
+	if minux.findline("/usr/apt/source.ls", source) then
+		minux.removestring("/usr/apt/source.ls" , source)
+		return true
+	else
+		return false
+	end
+end
+
+-- available software list update
+function softlist()
+-- first we read the apt source list and build the file
+	minux.debug("reading source list", "apt")
+	local sourcefile = fs.open("/usr/apt/source.ls" , "r")
+	local aptsource = sourcefile.readLine()
+	minux.debug("clearing temp cache", "apt")
+	fs.delete("/temp/apt/programs.temp")
+	minux.debug("searching manifest files", "apt")
+	while aptsource ~= nil do
+		minux.debug("touching:"..aptsource, "apt")
+		local requestretry = false
+		if http.checkURL(aptsource.."manifest/APT.db") == true then
+			requestretry = true
+		end
+		getrequest = http.get(aptsource.."manifest/APT.db")
+		request = getrequest.readAll()
+		getrequest.close()
+		if request ~= nil then
+			local tempfile = fs.open("/temp/apt/programs.temp" , "a")
+			tempfile.writeLine(aptsource)
+			tempfile.write(request)
+			tempfile.writeLine("")
+			tempfile.close()
+			aptsource = sourcefile.readLine()
+		end
+	end
+	sourcefile.close()
+
+	--now we clean up the file
+	minux.debug("prepairing new file for display", "apt")
+	local newfile = fs.open("/temp/apt/programs.ls" , "w")
+	local tempfile = fs.open("/temp/apt/programs.temp" , "r")
+	local templine = tempfile.readLine()
+	while templine ~= nil do
+		if templine == "AIF" then templine = tempfile.readLine() end
+		if templine ~= nil then newfile.writeLine(templine) end
+		templine = tempfile.readLine()
+	end
+	tempfile.close()
+	newfile.close()
+	minux.debug("finished getprogram", "apt")
+end
+
+function checkinstall(packname)
+	expect(1, packname, "string")
+	local installed = false
+	tempfile = fs.open("/etc/apt/list/installed.db","r")
+	templine = tempfile.readLine()
+	while templine ~= nil do
+		if templine == packname then installed = true end
+		templine = tempfile.readLine()
+	end
+	tempfile.close()
+	return installed
+end

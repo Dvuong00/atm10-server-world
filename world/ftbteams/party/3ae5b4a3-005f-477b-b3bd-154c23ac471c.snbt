@@ -1,0 +1,35 @@
+{
+	id: "3ae5b4a3-005f-477b-b3bd-154c23ac471c"
+	type: "party"
+	owner: "b6ea2dcf-4399-4e61-ac44-dcefacfcb2f5"
+	ranks: {
+		950ba3d2-ae76-4777-97aa-76bb7d3b7772: "officer"
+		b6ea2dcf-4399-4e61-ac44-dcefacfcb2f5: "owner"
+	}
+	properties: {
+		"ftbteams:display_name": "Bitch sluts"
+		"ftbteams:description": ""
+		"ftbteams:color": "#59FFBF"
+		"ftbteams:free_to_join": 0b
+		"ftbteams:max_msg_history_size": 1000
+		"ftbchunks:allow_explosions": 0b
+		"ftbchunks:allow_mob_griefing": 0b
+		"ftbchunks:allow_fake_players": 0b
+		"ftbchunks:allow_named_fake_players": [ ]
+		"ftbchunks:allow_fake_players_by_id": 1b
+		"ftbchunks:allow_pvp": 1b
+		"ftbchunks:block_edit_mode": "allies"
+		"ftbchunks:block_interact_mode": "allies"
+		"ftbchunks:entity_interact_mode": "allies"
+		"ftbchunks:nonliving_entity_attack_mode": "allies"
+		"ftbchunks:claim_visibility": "public"
+		"ftbchunks:location_mode": "allies"
+	}
+	message_history: [
+		{ from: "00000000-0000-0000-0000-000000000000", date: 1729714737383L, text: "{\"translate\":\"ftbteams.message.joined\",\"with\":[\"dvuong00\"],\"color\":\"yellow\"}" }
+		{ from: "b6ea2dcf-4399-4e61-ac44-dcefacfcb2f5", date: 1729714737390L, text: "{\"translate\":\"ftbteams.message.invited\",\"with\":[{\"text\":\"Core_of_Oblivion\",\"color\":\"yellow\"}],\"color\":\"green\"}" }
+		{ from: "00000000-0000-0000-0000-000000000000", date: 1729714745411L, text: "{\"translate\":\"ftbteams.message.joined\",\"with\":[\"Core_of_Oblivion\"],\"color\":\"green\"}" }
+		{ from: "b6ea2dcf-4399-4e61-ac44-dcefacfcb2f5", date: 1732414376206L, text: "{\"translate\":\"ftbteams.message.promoted\",\"with\":[{\"text\":\"Core_of_Oblivion\",\"color\":\"yellow\"}],\"color\":\"green\"}" }
+	]
+	extra: { }
+}

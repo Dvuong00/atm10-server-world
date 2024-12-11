@@ -1,0 +1,396 @@
+-- Minux OS boot loader
+-- variables
+local crashstage = 0
+local cursorhor, cursorver = term.getCursorPos()
+
+-- functions
+function getcrashhandler(stage)
+	local stagestate = 0
+	if fs.exists("/temp/minux/boot/fail"..stage..".tmp") then
+		local tempfile = fs.open("/temp/minux/boot/fail"..stage..".tmp" ,"r")
+		stagestate = tempfile.readLine()
+		tempfile.close()
+	end
+	return stagestate
+end
+
+function setcrashhandler(stage, value)
+	if fs.exists("/temp/minux/boot/fail"..stage..".tmp") then
+		local tempfile = fs.open("/temp/minux/boot/fail"..stage..".tmp" ,"w")
+		tempfile.writeLine(value)
+		tempfile.close()
+	end
+end
+
+function repairshell(stage)
+	term.clear()
+	term.setCursorPos(1,1)
+	print("Minux-V:".._G.version.." Init fail")
+	print("Init stage:"..stage)
+	print(" ")
+	print("hit enter to launch repair shell")
+	read()
+	setcrashhandler("1","0")
+	if stage == "1" or stage == 1 then 
+		shell.run("/rom/programs/shell.lua")
+	else 
+		shell.run("/etc/minux-main/workspace/shell.lua") 
+	end
+end
+
+function screenpos(cursorver)
+	if pocket then
+		term.setCursorPos(15,cursorver)
+	else
+		term.setCursorPos(40,cursorver)
+	end
+end
+
+-- start init process
+if pocket then
+	print("-----------Minux----------")
+else
+	print("--------------------Minux--------------------------")
+end
+-- crashhandler stage one break part, reset is after api's
+crashstage = getcrashhandler("1")
+if crashstage == "2" or crashstage == 2 then
+	setcrashhandler("1","0")
+	repairshell("1")
+else
+	crashstage = crashstage + 1
+	setcrashhandler("1",crashstage)
+end
+
+-- find version number
+if fs.exists("/etc/apt/list/version/minux-main.v") then
+	temp = fs.open("/etc/apt/list/version/minux-main.v","r")
+	_G.version = temp.readLine()
+	temp.close()
+else
+	_G.version = "Unknown"
+end
+
+--  we load the base api's and aliases.
+cursorhor, cursorver = term.getCursorPos()
+print("Kernel:")
+os.loadAPI("/etc/api/minux")
+os.loadAPI("/etc/api/apt")
+os.loadAPI("/etc/minux-main/sys/menu.lua")
+expectfile = "/rom/modules/main/cc/expect.lua"
+_G.expect = dofile(expectfile)
+if term.isColor() then
+	term.setTextColor(colors.green)
+end
+screenpos(cursorver)
+print("[V:".._G.version.."]")
+shell.run("/boot/alias.ls")
+if term.isColor() then term.setTextColor(colors.white) end
+
+-- run sanity check
+cursorhor, cursorver = term.getCursorPos()
+print("Sanitycheck:")
+minux.sanitycheck()
+if term.isColor() then
+	term.setTextColor(colors.green)
+end
+screenpos(cursorver)
+print("[Cleared]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+
+-- init hardware.
+-- modem
+cursorhor, cursorver = term.getCursorPos()
+print("Modem:")
+_G.modemside = minux.perfind("modem")
+if term.isColor() then
+	if _G.modemside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.modemside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+if _G.modemside ~= "NONE" then
+	rednet.open(_G.modemside)
+end
+
+-- disk drive
+cursorhor, cursorver = term.getCursorPos()
+print("Diskdrive:")
+_G.diskside = minux.perfind("drive")
+if term.isColor() then
+	if _G.diskside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.diskside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+
+-- monitor
+cursorhor, cursorver = term.getCursorPos()
+print("Monitor:")
+_G.monitorside = minux.perfind("monitor")
+if term.isColor() then
+	if _G.monitorside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.monitorside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+if _G.monitorside ~= "NONE" then
+	_G.monitor = peripheral.wrap(_G.monitorside)
+end
+
+-- printer
+cursorhor, cursorver = term.getCursorPos()
+print("Printer:")
+_G.printerside = minux.perfind("printer")
+if term.isColor() then
+	if _G.printerside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.printerside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+if printerside ~= "NONE" then
+	_G.printer = peripheral.wrap(_G.printerside)
+end
+
+-- speaker
+cursorhor, cursorver = term.getCursorPos()
+print("Speaker:")
+_G.speakerside = minux.perfind("speaker")
+if term.isColor() then
+	if _G.speakerside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.speakerside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+
+-- dhcp find
+if minux.getconfig("network") == "enabled" then
+	local cursorhor, cursorver = term.getCursorPos()
+	print("DHCP:")
+	shell.run("/boot/network/dhcp.sys")
+	screenpos(cursorver)
+	if term.isColor() then
+		if _G.server == "[none]" then
+			term.setTextColor(colors.red)
+		else
+			term.setTextColor(colors.green)
+		end
+	end
+	if server ~= "[none]" then
+		print("[".._G.server.."]")
+	else
+		print(_G.server)
+	end
+	if term.isColor() then
+		term.setTextColor(colors.white)
+	end
+end
+
+-- crashhandler setting
+cursorhor, cursorver = term.getCursorPos()
+print("Crashhandler:")
+local temp = minux.getconfig("crashhandler")
+if term.isColor() then
+	if temp == "enabled" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("["..temp.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+
+-- reset crashhandler stage 1 and start stage 2, this breaks just before login
+setcrashhandler("1","0")
+crashstage = getcrashhandler("2")
+if crashstage == "2" or crashstage == 2 then
+	setcrashhandler("2","0")
+	repairshell("2")
+else
+	crashstage = crashstage + 1
+	setcrashhandler("2",crashstage)
+end
+
+-- find debug mode config and load settings
+local readdebug = minux.getconfig("debug")
+_G.debugmode = readdebug
+cursorhor, cursorver = term.getCursorPos()
+print("Debug system:")
+if term.isColor() then
+	if _G.debugmode == "disabled" then 
+		term.setTextColor(colors.green)
+	else 
+		term.setTextColor(colors.red) 
+	end
+end
+screenpos(cursorver)
+print("[".._G.debugmode.."]")
+if term.isColor() then term.setTextColor(colors.white) end
+minux.debug("Debug system loaded", "minux")
+
+-- find login settings
+cursorhor, cursorver = term.getCursorPos()
+print("login mode:")
+local temp = minux.getconfig("login")
+if term.isColor() then 
+	if temp ~= "disabled" then 
+		term.setTextColor(colors.green)
+	else 
+		term.setTextColor(colors.red) 
+	end 
+end
+screenpos(cursorver)
+print("["..temp.."]")
+if term.isColor() then term.setTextColor(colors.white) end
+
+-- find ui mode
+cursorhor, cursorver = term.getCursorPos()
+print("UI mode:")
+local temp = minux.getconfig("ui")
+if term.isColor() then term.setTextColor(colors.green) end
+screenpos(cursorver)
+print("["..temp.."]")
+if term.isColor() then term.setTextColor(colors.white) end
+
+-- auto updates
+cursorhor, cursorver = term.getCursorPos()
+print("updates:")
+local temp = minux.getconfig("update")
+if term.isColor() then
+	if temp ~= "disabled" then 
+		term.setTextColor(colors.green)
+	else 
+		term.setTextColor(colors.red) 
+	end
+end
+screenpos(cursorver)
+print("["..temp.."]")
+if term.isColor() then term.setTextColor(colors.white) end
+
+-- we run the autoupdate program
+shell.run("/boot/network/update.sys")
+
+-- minux server launchers, this opens in a new tab but only one can exist
+if fs.exists("/etc/server.sys") then
+	minux.debug("Starting server.sys", "minux")
+	if term.isColor then 
+		shell.openTab("/etc/server.sys")
+	else 
+		shell.run("/etc/server.sys") 
+	end
+end
+
+-- 3rd party launcher scripts, this runs in the main shell and one at a time but unlimited amount
+if fs.exists("/boot/addon.d") then
+	minux.debug("running addons", "minux")
+	shell.run("/boot/addon.d")
+end
+
+-- we break crash handler stage 2 and start stage 3
+setcrashhandler("2","0")
+crashstage = getcrashhandler("3")
+if crashstage == "2" or crashstage == 2 then
+	setcrashhandler("3","0")
+	repairshell("3")
+else
+	crashstage = crashstage + 1
+	setcrashhandler("3",crashstage)
+end
+
+
+-- if /boot/override.d exists, we launch that
+minux.debug("running override.d", "minux")
+if fs.exists("/boot/override.d") then shell.run("/boot/override.d") end
+
+-- crash handler part 3 ending and part 4 start
+minux.debug("resetting crash handler stage 3","minux")
+setcrashhandler("3","0")
+if minux.getconfig("crashhandler") == true then
+	rashstage = getcrashhandler("4")
+	if crashstage == "2" or crashstage == 2 then
+		setcrashhandler("4","0")
+		repairshell("4")
+	else
+		crashstage = crashstage + 1
+		setcrashhandler("4",crashstage)
+	end
+end
+
+	-- trigger first boot configuration wizard
+if fs.exists("/usr/minux-main/resetconfig") == false and fs.exists("/bin/minux.sh") then
+	local tempfile = fs.open("/usr/minux-main/resetconfig","w")
+	tempfile.writeLine("delete this file to reset the system config")
+	tempfile.close()
+	term.clear()
+	term.setCursorPos(1,1)
+	print("--minux configuration wizard--")
+	print("first boot detected, running config")
+	print("")
+	print("hit enter to proceed")
+	read()
+	minux.setconfig("ui","menu")
+	shell.run("/etc/minux-main/menu/config.sys")
+	dorestart = true
+end
+
+--load menu settings and goooo!
+minux.debug("reading menu settings", "minux")
+if pocket then
+	print("--------------------------")
+else
+	print("---------------------------------------------------")
+end
+local menuchoice = minux.getconfig("ui")
+if menuchoice == "menu" then
+	minux.debug("launching menu", "minux")
+	shell.run("/bin/workspace.sh")
+elseif menuchoice == "prompt" then
+	minux.debug("launching prompt", "minux")
+	shell.run("/etc/minux-main/workspace/shell.lua")
+elseif menuchoice == "craftos" then
+	minux.debug("launching craftos", "minux")
+	shell.run("/rom/programs/shell.lua")
+elseif menuchoice == "workspace" then
+	minux.debug("launching workspace", "minux")
+	shell.run("/bin/workspace.sh")
+else
+	shell.run("/etc/minux-main/workspace/shell.lua")
+end
+
+minux.debug("system reboot", "minux")
+minux.restart()

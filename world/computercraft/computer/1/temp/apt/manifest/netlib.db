@@ -1,0 +1,7 @@
+AIF
+/etc/api/netlib
+/etc/apt/alias/netlib.al
+/bin/ping.sh
+/bin/netlib.sh
+/bin/sendfile.sh
+/bin/getfile.sh
